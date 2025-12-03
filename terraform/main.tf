@@ -1,8 +1,8 @@
 locals {
-  bucket_suffix      = var.bucket_suffix != "" ? var.bucket_suffix : random_id.bucket_suffix[0].hex
-  bucket_name_bronze = "nlcli-ml-training-bronze-${var.environment}-${local.bucket_suffix}"
-  bucket_name_silver = "nlcli-ml-training-silver-${var.environment}-${local.bucket_suffix}"
-  bucket_name_gold   = "nlcli-ml-training-gold-${var.environment}-${local.bucket_suffix}"
+  bucket_suffix       = var.bucket_suffix != "" ? var.bucket_suffix : random_id.bucket_suffix[0].hex
+  bucket_name_base    = "nlcli-ml-training-base-${local.bucket_suffix}"
+  bucket_name_staging = "nlcli-ml-training-staging-${local.bucket_suffix}"
+  bucket_name_mart    = "nlcli-ml-training-mart-${local.bucket_suffix}"
 }
 
 resource "random_id" "bucket_suffix" {
@@ -10,8 +10,8 @@ resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
 
-resource "google_storage_bucket" "nlcli_ml_training_bronze" {
-  name          = local.bucket_name_bronze
+resource "google_storage_bucket" "nlcli_ml_training_base" {
+  name          = local.bucket_name_base
   location      = var.region
   storage_class = "STANDARD"
   project       = var.project_id
@@ -50,14 +50,14 @@ resource "google_storage_bucket" "nlcli_ml_training_bronze" {
   labels = {
     environment  = var.environment
     project      = "nlcli-wizard"
-    data_layer   = "bronze"
+    data_layer   = "base"
     architecture = "medallion"
     purpose      = "ml-training"
   }
 }
 
-resource "google_storage_bucket" "nlcli_ml_training_silver" {
-  name          = local.bucket_name_silver
+resource "google_storage_bucket" "nlcli_ml_training_staging" {
+  name          = local.bucket_name_staging
   location      = var.region
   storage_class = "STANDARD"
   project       = var.project_id
@@ -96,14 +96,14 @@ resource "google_storage_bucket" "nlcli_ml_training_silver" {
   labels = {
     environment  = var.environment
     project      = "nlcli-wizard"
-    data_layer   = "silver"
+    data_layer   = "staging"
     architecture = "medallion"
     purpose      = "ml-training"
   }
 }
 
-resource "google_storage_bucket" "nlcli_ml_training_gold" {
-  name          = local.bucket_name_gold
+resource "google_storage_bucket" "nlcli_ml_training_mart" {
+  name          = local.bucket_name_mart
   location      = var.region
   storage_class = "STANDARD"
   project       = var.project_id
@@ -142,8 +142,27 @@ resource "google_storage_bucket" "nlcli_ml_training_gold" {
   labels = {
     environment  = var.environment
     project      = "nlcli-wizard"
-    data_layer   = "gold"
+    data_layer   = "mart"
     architecture = "medallion"
     purpose      = "ml-training"
+  }
+}
+
+resource "google_storage_bucket" "nlcli_models" {
+  name          = "nlcli-models"
+  location      = var.region
+  storage_class = "STANDARD"
+  project       = var.project_id
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = var.enable_versioning
+  }
+
+  labels = {
+    environment = var.environment
+    project     = "nlcli-wizard"
+    purpose     = "ml-models"
   }
 }
