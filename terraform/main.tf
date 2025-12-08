@@ -157,7 +157,7 @@ resource "google_storage_bucket" "nlcli_models" {
   uniform_bucket_level_access = true
 
   versioning {
-    enabled = var.enable_versioning
+    enabled = false
   }
 
   labels = {
