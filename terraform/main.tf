@@ -10,6 +10,25 @@ resource "random_id" "bucket_suffix" {
   byte_length = 4
 }
 
+resource "google_storage_bucket" "terraform_state" {
+  name          = "nlcli-terraform-state-${var.project_id}"
+  location      = var.region
+  storage_class = "STANDARD"
+  project       = var.project_id
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
+
+  labels = {
+    environment = var.environment
+    project     = "nlcli-wizard"
+    purpose     = "terraform-state"
+  }
+}
+
 resource "google_storage_bucket" "nlcli_ml_training_base" {
   name          = local.bucket_name_base
   location      = var.region

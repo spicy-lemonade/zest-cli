@@ -12,11 +12,10 @@ terraform {
     }
   }
 
-  # Uncomment to use remote state in GCS
-  # backend "gcs" {
-  #   bucket = "your-terraform-state-bucket"
-  #   prefix = "nlcli-wizard/state"
-  # }
+  backend "gcs" {
+    bucket = "nlcli-terraform-state-nl-cli"
+    prefix = "nlcli-wizard/state"
+  }
 }
 
 provider "google" {
