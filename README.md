@@ -16,6 +16,14 @@ We utilize a **Medallion Architecture** pattern for data storage to ensure repro
 | **🥇 Mart** | `nlcli-ml-training-mart-03ca945a` | Final datasets training with deduplication (cross dataset deduplication). |
 | **🪣 Models** | `nlcli-models` | Storage for final `.gguf` quantized models. We want to stay within the free tier (5GB) so use Hugging Face preferably.  |
 
+### Versioning
+
+  | Bucket  | Versioning | Version Cleanup | COLDLINE Transition                   |  
+  |---------|------------|-----------------|---------------------------------------|
+  | base    | Enabled    | Keep 3 versions | After 14 days (current + non-current) |     
+  | staging | Enabled    | Keep 3 versions | None                                  |     
+  | mart    | Enabled    | Keep 3 versions | None                                  |                                                                                                              
+  | models  | Enabled    | Keep 3 versions | None                                  | 
 
 ---
 
