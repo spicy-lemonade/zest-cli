@@ -22,3 +22,13 @@ override.tf.json
 # CLI config
 .terraformrc
 terraform.rc
+
+# Python virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
