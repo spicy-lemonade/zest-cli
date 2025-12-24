@@ -5,9 +5,10 @@ from firebase_admin import initialize_app, firestore
 
 initialize_app()
 
-# Remove "STRIPE_WEBHOOK_SECRET" when creating the initial webhook to Firebase and also modify line 22
+# Remove "STRIPE_WEBHOOK_SECRET" when creating the initial webhook to Firebase and also modify line 23
 # to use the temporary dummy value instead. Re-add these when running `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET`
 @https_fn.on_request(
+    region="europe-west1",
     secrets=["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"], 
     cors=options.CorsOptions(
         cors_origins="*",
