@@ -2,7 +2,7 @@ import os
 import stripe
 import random
 import resend
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from firebase_functions import https_fn, options
 from firebase_admin import initialize_app, firestore
 
@@ -169,9 +169,11 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
     if not stored_otp or not otp_expiry:
         return https_fn.Response("No OTP found. Please request a new one.", status=400)
 
-    if datetime.utcnow() > otp_expiry:
-        return https_fn.Response("OTP expired. Please request a new one.", status=400)
-
+    if datetime.now(timezone.utc) > otp_expiry:
+        return https_fn.Response(
+            "OTP expired. Please request a new one.",
+            status=400
+        )
     if stored_otp != otp:
         return https_fn.Response("Invalid OTP", status=403)
 

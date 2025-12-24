@@ -42,8 +42,8 @@ def authenticate():
             # Lease expired: Attempt silent background refresh
             print("\033[K🌶  Refreshing license...", end="\r")
             try:
-                res = requests.post(f"{API_BASE}/verify_license",
-                                    json={"email": email, "hardware_id": hw_id},
+                res = requests.post(f"{API_BASE}/validate_device",
+                                    json={"email": email, "device_uuid": hw_id},
                                     timeout=4)
                 if res.status_code == 200:
                     creds["last_verified"] = current_time
@@ -78,9 +78,17 @@ def authenticate():
     print("\033[K📧 Code sent!")
     code = input("Enter the 6-digit code: ").strip()
 
-    # Final Verification
-    verify_res = requests.post(f"{API_BASE}/verify_license",
-                            json={"email": email, "hardware_id": hw_id, "otp": code})
+    # Get device nickname from system
+    nickname = platform.node()
+
+    # Final Verification and Device Registration
+    verify_res = requests.post(f"{API_BASE}/verify_otp_and_register",
+                            json={
+                                "email": email,
+                                "otp": code,
+                                "device_uuid": hw_id,
+                                "device_nickname": nickname
+                            })
 
     if verify_res.status_code == 200:
         os.makedirs(CONFIG_DIR, exist_ok=True)
