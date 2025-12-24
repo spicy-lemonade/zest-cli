@@ -95,8 +95,8 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
 
     # Generate 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
-    otp_expiry = datetime.utcnow() + timedelta(minutes=OTP_EXPIRY_MINUTES)
-
+    otp_expiry = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    
     # Save OTP to Firestore
     doc_ref.update({
         "otp_code": otp_code,
