@@ -1,8 +1,8 @@
 # Zest CLI - Commercial Edition
 
-This directory contains the licensed, commercial version of Zest with 2-device activation, OTP verification, and complete packaging for macOS distribution.
+Licensed version of Zest with 2-device activation, OTP verification, and macOS packaging.
 
-## 📁 Directory Structure
+## 📁 Structure
 
 ```
 zest_cli/
@@ -10,366 +10,197 @@ zest_cli/
 ├── requirements.txt        # Python dependencies
 ├── build.sh               # PyInstaller build script
 ├── create_installer.sh    # .pkg installer creator
-├── SETUP.md              # Development and testing guide
-├── SIGNING_GUIDE.md      # Code signing & notarization
+├── test/                  # Test utilities
 └── README.md             # This file
 ```
 
-## 🎯 What's Been Built
-
-### ✅ Backend API (`../functions/main.py`)
-
-Six Firebase Cloud Functions for license management:
-
-1. **`stripe_webhook`** - Creates license on Stripe purchase
-2. **`send_otp`** - Generates and emails 6-digit OTP
-3. **`verify_otp_and_register`** - Validates OTP and registers device
-4. **`replace_device`** - Swaps old device for new one
-5. **`deregister_device`** - Removes device (for `--logout`)
-6. **`validate_device`** - Quick check on every CLI run
-
-### ✅ Licensed CLI (`main.py`)
-
-Features:
-- First-run activation with email + OTP
-- Hardware UUID extraction (macOS IOPlatformUUID)
-- 2-device limit enforcement
-- Device nickname management
-- Local license storage (`~/Library/Application Support/Zest/license.db`)
-- `--logout` command (deregister device)
-- `--uninstall` command (complete cleanup)
-- Offline validation (with online sync)
-
-### ✅ Packaging Scripts
-
-- **`build.sh`** - PyInstaller compilation → `.app` bundle
-- **`create_installer.sh`** - `.pkg` creation with postinstall
-- **Postinstall script** - Creates symlink + shell aliases
-
-### ✅ Documentation
-
-- **`SETUP.md`** - Testing and development workflow
-- **`SIGNING_GUIDE.md`** - Complete code signing guide
-- **`README.md`** - This overview
-
 ## 🚀 Quick Start
 
-### 1. Configure the API Endpoint
+### Usage
 
-Edit `main.py` line 14 and replace `YOUR_PROJECT_ID`:
-
-```python
-API_BASE_URL = "https://europe-west1-YOUR_PROJECT_ID.cloudfunctions.net"
-```
-
-Get your project ID:
+**During Development/Testing**:
 ```bash
-cd ../
-firebase projects:list
+python main.py "your query here"
 ```
 
-### 2. Verify Email Service Configuration
-
-The backend uses Resend to send OTPs. Configuration is already complete:
-
-1. Resend API key is configured in Firebase Functions secrets as `RESEND_API_KEY`
-2. OTP emails are sent from `onboarding@resend.dev` (Resend's default test domain)
-
-If you need to update the Resend API key:
+**After Installation**:
 ```bash
-firebase functions:secrets:set RESEND_API_KEY
+zest "your query here"
 ```
 
-Note: For production, you should verify a custom domain in Resend and update the "from" address in `functions/main.py`.
+**IMPORTANT**: Don't include "zest" in the query when testing!
 
-### 3. Deploy Backend
-
+✅ Correct:
 ```bash
-cd ../functions
-firebase deploy --only functions
+python main.py "show me all running docker containers"
+# Output: docker ps
 ```
 
-### 4. Test Locally
-
+❌ Wrong:
 ```bash
-cd ../zest_cli
-pip install -r requirements.txt
-python main.py "list files"
+python main.py zest show me all running docker containers
+# This includes "zest" in the query, confusing the model
 ```
 
-You'll be prompted for email/OTP on first run.
+### Setup
 
-### 5. Build for Distribution
-
-```bash
-# Build the .app bundle
-./build.sh
-
-# Create the .pkg installer
-./create_installer.sh
-
-# Sign and notarize (requires Apple Developer account)
-# See SIGNING_GUIDE.md
-```
-
-## 📋 Implementation Checklist
-
-### Backend
-- [x] 2-device licensing logic
-- [x] OTP generation and validation
-- [x] Device registration and management
-- [x] Stripe webhook integration
-- [x] Email service configuration (Resend)
-
-### CLI
-- [x] First-run activation flow
-- [x] Hardware UUID extraction
-- [x] Local license storage
-- [x] `--logout` command
-- [x] `--uninstall` command
-- [x] Offline/online validation
-- [ ] Update checking (TODO: See "Future Enhancements" below)
-
-### Packaging
-- [x] PyInstaller build script
-- [x] .app bundle structure
-- [x] .pkg installer with postinstall
-- [x] Symlink creation
-- [x] Shell alias setup
-- [ ] Code signing (TODO: Requires Developer ID)
-- [ ] Notarization (TODO: Requires Developer account)
-
-## 🔐 Security Model
-
-### How Licensing Works
-
-1. **Purchase**: User buys via Stripe → Webhook creates Firestore license
-2. **First Run**: CLI prompts for email → Backend sends OTP
-3. **Activation**: User enters OTP → Backend verifies and registers device UUID
-4. **Validation**: Every run checks local license (with periodic online sync)
-5. **2-Device Limit**: Enforced server-side, can't be bypassed locally
-
-### Why It's Secure
-
-- **Binary Compilation**: PyInstaller makes source code unreadable
-- **Hardware Binding**: UUID tied to Mac hardware, hard to spoof
-- **Server Validation**: Device list stored server-side
-- **OTP Verification**: Prevents email hijacking
-- **Local + Cloud**: Works offline, syncs when online
-
-## 📦 Distribution Workflow
-
-```
-1. Development → 2. Build → 3. Sign → 4. Notarize → 5. Distribute
-     ↓              ↓          ↓          ↓             ↓
-   Code          .app      Signed     Apple         Website
-   Changes       Bundle    .pkg       Approves      Download
-```
-
-### For Testing (Unsigned)
-
-1. Run `./build.sh`
-2. Run `./create_installer.sh`
-3. Test: `sudo installer -pkg ./dist/Zest-1.0.0.pkg -target /`
-
-### For Production (Signed & Notarized)
-
-1. Get Apple Developer account ($99/year)
-2. Create Developer ID certificates
-3. Sign with `codesign` and `productsign`
-4. Notarize with `xcrun notarytool`
-5. Staple with `xcrun stapler`
-6. Distribute `.pkg` file
-
-See `SIGNING_GUIDE.md` for complete instructions.
-
-## 🧪 Testing the License Flow
-
-### Test 1: First-Time Activation
-
-1. Create test license in Firestore:
-   ```
-   Collection: licenses
-   Document: test@example.com
-   Fields:
-     is_paid: true
-     devices: []
+1. **Configure API endpoint** in `main.py` line 14:
+   ```python
+   API_BASE = "https://europe-west1-YOUR_PROJECT_ID.cloudfunctions.net"
    ```
 
-2. Run CLI:
+2. **Deploy backend**:
+   ```bash
+   cd ../functions
+   firebase deploy --only functions
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Test locally**:
    ```bash
    python main.py "list files"
    ```
 
-3. You'll see:
-   - Email prompt
-   - OTP sent (check logs or email)
-   - OTP entry prompt
-   - Device nickname prompt
-   - Success message
+5. **Build for distribution**:
+   ```bash
+   ./build.sh                  # Creates .app bundle
+   ./create_installer.sh       # Creates .pkg installer
+   ```
 
-### Test 2: Second Device
+## 🔐 How It Works
 
-1. On another Mac (or delete `~/Library/Application Support/Zest/`)
-2. Run `python main.py "list files"`
-3. Same flow - second device registers
+1. **Purchase**: User buys via Polar → Webhook creates Firestore license
+2. **First Run**: CLI prompts for email → Backend sends OTP
+3. **Activation**: User enters OTP → Backend registers device UUID
+4. **Validation**: 14-day local lease with periodic online sync
+5. **2-Device Limit**: Enforced server-side
 
-### Test 3: Device Limit
+## 🧪 Testing
 
-1. Try activating a third device
-2. You'll see list of existing devices
-3. Choose which to replace
+**Prerequisites**:
+- Backend deployed
+- `API_BASE` configured in `main.py`
+- Model at `~/.zest/gemma3_4b_Q4_K_M.gguf`
+- Dependencies installed
 
-### Test 4: Logout
+### Test 1: First-Time Activation
+
+```bash
+# Clear existing license
+rm -f "$HOME/Library/Application Support/Zest/license.json"
+
+# Create test license
+cd test
+python create_test_license.py your-email@example.com
+cd ..
+
+# Run CLI
+python main.py "list files"
+```
+
+**Expected**: Email prompt → OTP sent → Device registered → Command generated
+
+**Verify**:
+```bash
+cat "$HOME/Library/Application Support/Zest/license.json"
+firebase firestore:get licenses/your-email@example.com
+```
+
+### Test 2: Existing License
+
+```bash
+python main.py "list files"
+```
+
+**Expected**: No OTP prompt (14-day lease still valid)
+
+### Test 3: Logout
 
 ```bash
 python main.py --logout
 ```
 
-Device deregistered, local license deleted.
-
-### Test 5: Uninstall
-
-```bash
-python main.py --uninstall
-```
-
-Deregisters device, removes symlink, removes aliases, deletes app data.
+**Expected**: Device deregistered, local license deleted
 
 ## 🔧 Configuration
 
-### API Endpoint
+| Setting | Location | Default |
+|---------|----------|---------|
+| API Endpoint | `main.py` line 14 | `europe-west1-nl-cli-dev.cloudfunctions.net` |
+| Model Path | `main.py` line 13 | `~/.zest/gemma3_4b_Q4_K_M.gguf` |
+| Lease Duration | `main.py` line 17 | 14 days |
+| Device Limit | `../functions/main.py` line 15 | 2 devices |
+| OTP Expiry | `../functions/main.py` line 16 | 5 minutes |
 
-`main.py` line 14:
-```python
-API_BASE_URL = "https://europe-west1-YOUR_PROJECT_ID.cloudfunctions.net"
+## 🐛 Troubleshooting
+
+### Authentication Issues
+
+**Authentication doesn't trigger**
+- Valid 14-day lease cached: `cat "$HOME/Library/Application Support/Zest/license.json"`
+- Clear: `rm -f "$HOME/Library/Application Support/Zest/license.json"`
+
+**"No license found"**
+- Verify Polar webhook is working
+- Check Firestore: `firebase firestore:get licenses/your-email@example.com`
+
+**Network error**
+- Check `API_BASE` in `main.py`
+- Verify functions deployed: `firebase deploy --only functions`
+- Test endpoint: `curl https://europe-west1-YOUR_PROJECT_ID.cloudfunctions.net/send_otp`
+
+### Model Issues
+
+**Wrong command or repeats query**
+- Don't include "zest" in test queries (see Usage section)
+- Model exists: `ls -lh ~/.zest/gemma3_4b_Q4_K_M.gguf`
+- Test examples:
+  - `python main.py "list files"` → `ls`
+  - `python main.py "show running processes"` → `ps aux`
+  - `python main.py "show disk usage"` → `df -h`
+
+**Model not found**
+- Download to `~/.zest/gemma3_4b_Q4_K_M.gguf`
+- Update `MODEL_PATH` in `main.py` line 13
+
+### Testing Issues
+
+**Wrong directory**
+- Run from `zest_cli/` directory, not `zest_cli/test/`
+
+## 📦 Distribution
+
+### Testing (Unsigned)
+```bash
+./build.sh
+./create_installer.sh
+sudo installer -pkg ./dist/Zest-1.0.0.pkg -target /
 ```
 
-### Model Path
+### Production (Signed & Notarized)
+1. Get Apple Developer account ($99/year)
+2. Create Developer ID certificates
+3. Sign with `codesign` and `productsign`
+4. Notarize with `xcrun notarytool`
+5. Staple with `xcrun stapler`
 
-`main.py` line 12:
-```python
-MODEL_PATH = os.path.expanduser("~/.zest/gemma3_4b_Q4_K_M.gguf")
-```
-
-For the .app bundle, this should be:
-```python
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "../Resources/models/gemma3_4b_Q4_K_M.gguf")
-```
-
-### Device Limit
-
-`../functions/main.py` line 15:
-```python
-MAX_DEVICES = 2
-```
-
-### OTP Expiry
-
-`../functions/main.py` line 16:
-```python
-OTP_EXPIRY_MINUTES = 5
-```
+See `SIGNING_GUIDE.md` for details.
 
 ## 📊 Firestore Schema
 
 ```
 licenses/{email}
   ├─ is_paid: boolean
-  ├─ devices: array
-  │   ├─ [0]
-  │   │   ├─ uuid: string
-  │   │   ├─ nickname: string
-  │   │   └─ registered_at: string (ISO 8601)
-  │   └─ [1]
-  │       ├─ uuid: string
-  │       ├─ nickname: string
-  │       └─ registered_at: string
+  ├─ devices: array[{uuid, nickname, registered_at}]
   ├─ otp_code: string (temporary)
   ├─ otp_expiry: datetime (temporary)
   └─ created_at: timestamp
 ```
 
-## 🚧 Future Enhancements
-
-### Auto-Update System
-
-Create an update manifest:
-
-```json
-{
-  "version": "1.1.0",
-  "url": "https://spicylemonade.com/downloads/Zest-1.1.0.pkg",
-  "release_notes": "Bug fixes and performance improvements",
-  "required": false
-}
-```
-
-Add to CLI:
-```python
-def check_for_updates():
-    response = requests.get("https://spicylemonade.com/zest/manifest.json")
-    data = response.json()
-    if version_compare(data["version"], CURRENT_VERSION) > 0:
-        print(f"Update available: {data['version']}")
-```
-
-### Analytics (Optional)
-
-Track anonymous usage:
-```python
-def send_analytics(event_type):
-    requests.post(f"{API_BASE_URL}/analytics", json={
-        "event": event_type,
-        "version": VERSION,
-        "os": platform.system()
-    })
-```
-
-### License Transfer
-
-Add endpoint to transfer license to new email:
-```python
-@https_fn.on_request
-def transfer_license(req):
-    # Validate ownership
-    # Update email in Firestore
-    # Send confirmation emails
-```
-
-## 🐛 Troubleshooting
-
-### "No license found for this email"
-
-- Verify Stripe webhook is working
-- Check Firestore for the license document
-- Make sure email matches exactly
-
-### "Network error"
-
-- Check API_BASE_URL is correct
-- Verify Firebase Functions are deployed
-- Check internet connection
-
-### Build fails with "Model not found"
-
-- Download model to `~/.zest/gemma3_4b_Q4_K_M.gguf`
-- Or update MODEL_PATH in build.sh
-
-### Installer doesn't create symlink
-
-- Check postinstall script has execute permissions
-- Run manually: `sudo /Applications/Zest.app/Contents/MacOS/zest`
-
-## 📞 Support
-
-For issues or questions:
-- GitHub: [github.com/spicy-lemonade/zest](https://github.com/spicy-lemonade/zest)
-- Email: support@spicylemonade.com
-- Docs: [spicylemonade.com/docs](https://spicylemonade.com/docs)
-
 ## 📄 License
 
 Copyright © 2025 Spicy Lemonade. All rights reserved.
-
-This is commercial software. See LICENSE file for terms.

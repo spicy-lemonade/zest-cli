@@ -164,8 +164,32 @@ def main():
         flag = sys.argv[1].lower().strip()
         if flag == "--logout":
             if os.path.exists(TOKEN_FILE):
-                os.remove(TOKEN_FILE)
-                print("🍋 Logged out successfully.")
+                try:
+                    with open(TOKEN_FILE, "r") as f:
+                        creds = json.load(f)
+                    email = creds.get("email")
+                    hw_id = get_hw_id()
+
+                    if email and hw_id:
+                        print("🍋 Deregistering device...", end="\r")
+                        try:
+                            res = requests.post(
+                                f"{API_BASE}/deregister_device",
+                                json={"email": email, "device_uuid": hw_id},
+                                timeout=10
+                            )
+                            if res.status_code == 200:
+                                print("\033[K🍋 Device deregistered from license.")
+                            else:
+                                print(f"\033[K⚠️  Could not deregister device: {res.text}")
+                        except requests.exceptions.RequestException:
+                            print("\033[K⚠️  Could not reach server. Device may still be registered.")
+
+                    os.remove(TOKEN_FILE)
+                    print("🍋 Logged out successfully.")
+                except (json.JSONDecodeError, KeyError):
+                    os.remove(TOKEN_FILE)
+                    print("🍋 Logged out successfully.")
             else:
                 print("🍋 You are not currently logged in.")
             sys.exit(0)
