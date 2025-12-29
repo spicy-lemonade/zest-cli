@@ -31,7 +31,6 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
     Note: POLAR_SUCCESS_URL is configured in the Polar dashboard, not needed here.
     """
     webhook_secret = os.environ.get("POLAR_WEBHOOK_SECRET")
-
     if not webhook_secret:
         return https_fn.Response("Missing webhook secret", status=500)
 
