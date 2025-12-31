@@ -154,15 +154,20 @@ https://europe-west1-<your-project-id>.cloudfunctions.net/polar_webhook
 Enable the following webhook event:
 - **order.created** (fires when a one-time purchase is completed) 
 
-## 🤖 Test Install
-After building the dmg you can open it from the repo via:
+## 🤖 Test Install 
+
+_Note: right now there is only one email `info@zestcli.com` so if anybody other than Ciaran wants to test, we need to arrange that._
+
+After building the dmg you can open it via:
 
 - Run `open ~/spicy_lemonade/natural-language-cli-infra/zest_cli/dist/Zest-Q5-1.0.0.dmg`
 <img width="785" height="455" alt="Screenshot 2025-12-31 at 20 57 31" src="https://github.com/user-attachments/assets/798d6302-ceb3-44ad-b495-97dc01fdc6e7" />
 
 - Drag to applications.
-- Open. As this is not a notarised app, it will take a moment. It will be quicker to right click + open.
+- Open. As this is not a notarised app, it will take a moment. (It is quicker to right click + open.)
 - A popup with instructions appears:
+
 <img width="411" height="388" alt="Screenshot 2025-12-31 at 21 06 56" src="https://github.com/user-attachments/assets/5f6c9bab-33ea-4860-922a-33a8f87cd79f" />
-- Run the `zest` tool in the command line. You will be prompted to enter the email you purchased with.
-- Enter test@zestcli.com which is allowed to have 2 machine IDs. If more than 2 slots are used, this will fail, and you will need to run `zest --logout` or `zest --uninstall` on another machine.
+
+- Run the `zest` tool in the command line, e.g. `zest what time is it`. You will be prompted to enter the email you purchased with, test@zestcli.com. You will receive a 1-time-password.
+- Enter the OTP. One account is allowed to have 2 machine IDs. If more than 2 slots are used, this will fail, and you will need to run `zest --logout` or `zest --uninstall` on another machine.
