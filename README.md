@@ -153,3 +153,8 @@ https://europe-west1-<your-project-id>.cloudfunctions.net/polar_webhook
 
 Enable the following webhook event:
 - **order.created** (fires when a one-time purchase is completed) 
+
+## 🤖 Test Install
+After building the dmg you can open it from the repo via:
+
+- Run `open ~/spicy_lemonade/natural-language-cli-infra/zest_cli/dist/Zest-Q5-1.0.0.dmg`
