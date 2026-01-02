@@ -129,6 +129,10 @@ cp -R "$BUILD_DIR/pyinstaller_dist/zest/_internal/"* "$APP_BUNDLE/Contents/Frame
 echo "📦 Copying model to bundle..."
 cp "$MODEL_PATH" "$APP_BUNDLE/Contents/Resources/$MODEL_NAME"
 
+# Copy main.py for standalone use (survives app deletion)
+echo "📝 Copying standalone CLI..."
+cp "$PROJECT_DIR/main.py" "$APP_BUNDLE/Contents/Resources/main.py"
+
 # Copy icon if exists
 if [ -f "$PROJECT_DIR/resources/icon.icns" ]; then
     cp "$PROJECT_DIR/resources/icon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
@@ -199,47 +203,133 @@ APP_NAME="$(basename "$(dirname "$(dirname "$SCRIPT_DIR")")")"
 if [[ "$APP_NAME" == *"FP16"* ]]; then
     MODEL_NAME="qwen3_4b_fp16.gguf"
     PRODUCT_NAME="FP16"
+    PRODUCT_LOWER="fp16"
 else
     MODEL_NAME="qwen3_4b_Q5_K_M.gguf"
     PRODUCT_NAME="Q5"
+    PRODUCT_LOWER="q5"
+fi
+
+# Check if launched from Finder (will show dialog AFTER first-run setup)
+LAUNCHED_FROM_FINDER=false
+if [ $# -eq 0 ]; then
+    PARENT_NAME="$(ps -o comm= -p $PPID 2>/dev/null)"
+    if [[ "$PARENT_NAME" == *"launchd"* ]] || [[ "$PARENT_NAME" == *"Finder"* ]] || [[ "$PARENT_NAME" == *"open"* ]]; then
+        LAUNCHED_FROM_FINDER=true
+    fi
 fi
 
 MODEL_SRC="$RESOURCES_DIR/$MODEL_NAME"
 MODEL_DEST="$HOME/.zest/$MODEL_NAME"
+MAIN_PY_SRC="$RESOURCES_DIR/main.py"
+MAIN_PY_DEST="$HOME/.zest/main.py"
 
-# Check if launched from Finder (double-click from GUI, not from terminal)
-# Finder launches apps with no arguments and with a specific parent process
-if [ $# -eq 0 ]; then
-    PARENT_NAME="$(ps -o comm= -p $PPID 2>/dev/null)"
-    if [[ "$PARENT_NAME" == *"launchd"* ]] || [[ "$PARENT_NAME" == *"Finder"* ]] || [[ "$PARENT_NAME" == *"open"* ]]; then
-        # Show simple dialog explaining how to use Zest
-        osascript -e "display dialog \"Zest CLI ($PRODUCT_NAME)
+# First-run setup
+SETUP_MARKER="$HOME/.zest/.${PRODUCT_LOWER}_setup_complete"
+if [ ! -f "$SETUP_MARKER" ]; then
+    mkdir -p "$HOME/.zest"
 
-This is a command-line tool. To use it:
+    # Copy model
+    if [ ! -f "$MODEL_DEST" ] && [ -f "$MODEL_SRC" ]; then
+        echo "🍋 Installing Zest $PRODUCT_NAME model (first run only)..."
+        cp "$MODEL_SRC" "$MODEL_DEST"
+        echo "✅ Model installed."
+    fi
 
-1. Open Terminal
+    # Copy standalone CLI for cleanup after app deletion
+    if [ -f "$MAIN_PY_SRC" ]; then
+        cp "$MAIN_PY_SRC" "$MAIN_PY_DEST"
+    fi
 
-2. Create a symlink (one-time):
-   sudo ln -sf /Applications/$APP_NAME/Contents/MacOS/zest-launcher /usr/local/bin/zest
+    # Create wrapper script at /usr/local/bin/zest
+    WRAPPER_PATH="/usr/local/bin/zest"
+    WRAPPER_TMP="/tmp/zest_wrapper_$$"
+    if [ ! -f "$WRAPPER_PATH" ]; then
+        # Create temp file in /tmp (always writable)
+        cat > "$WRAPPER_TMP" << 'WRAPPER_EOF'
+#!/bin/bash
+# Zest CLI Wrapper - Survives app deletion for cleanup
 
-3. Add to your ~/.zshrc (recommended):
-   alias zest='noglob /usr/local/bin/zest'
-   source ~/.zshrc
+FP16_APP="/Applications/Zest-FP16.app"
+Q5_APP="/Applications/Zest-Q5.app"
 
-4. Then run:
-   zest \\\"find all python files\\\"
-
-See README_INSTALL.txt for full setup.\" buttons {\"OK\"} default button \"OK\" with title \"Zest CLI\""
-        exit 0
+# Find which app to use
+if [ -d "$FP16_APP" ] && [ -d "$Q5_APP" ]; then
+    CONFIG_FILE="$HOME/Library/Application Support/Zest/config.json"
+    if [ -f "$CONFIG_FILE" ]; then
+        ACTIVE=$(grep -o '"active_product": *"[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4)
+        [ "$ACTIVE" = "fp16" ] && APP_PATH="$FP16_APP" || APP_PATH="$Q5_APP"
+    else
+        APP_PATH="$FP16_APP"
+    fi
+elif [ -d "$FP16_APP" ]; then
+    APP_PATH="$FP16_APP"
+elif [ -d "$Q5_APP" ]; then
+    APP_PATH="$Q5_APP"
+else
+    # No apps found - try standalone Python CLI for cleanup
+    PYTHON_CLI="$HOME/.zest/main.py"
+    if [ -f "$PYTHON_CLI" ]; then
+        exec python3 "$PYTHON_CLI" "$@"
+    else
+        echo "❌ Zest is not installed."
+        exit 1
     fi
 fi
 
-# Ensure model is in place
-if [ ! -f "$MODEL_DEST" ]; then
+exec "$APP_PATH/Contents/MacOS/zest-launcher" "$@"
+WRAPPER_EOF
+
+        if [ -f "$WRAPPER_TMP" ]; then
+            # Try to move without admin first
+            if mv "$WRAPPER_TMP" "$WRAPPER_PATH" 2>/dev/null && chmod +x "$WRAPPER_PATH" 2>/dev/null; then
+                echo "✅ Created wrapper: /usr/local/bin/zest"
+            else
+                # Need admin privileges - use AppleScript dialog for GUI, sudo for terminal
+                if [ "$LAUNCHED_FROM_FINDER" = true ]; then
+                    # Use AppleScript to get admin privileges (shows macOS auth dialog)
+                    osascript -e "do shell script \"mv '$WRAPPER_TMP' '$WRAPPER_PATH' && chmod +x '$WRAPPER_PATH'\" with administrator privileges" 2>/dev/null
+                else
+                    # Terminal mode - use sudo
+                    echo "📎 Setting up command-line access requires sudo..."
+                    echo "Please enter your password to create /usr/local/bin/zest"
+                    sudo mv "$WRAPPER_TMP" "$WRAPPER_PATH" && sudo chmod +x "$WRAPPER_PATH"
+                    echo "✅ Created wrapper: /usr/local/bin/zest"
+                    echo ""
+                    echo "Add to your ~/.bashrc or ~/.zshrc (for using ? and * wildcards):"
+                    echo "  alias zest='noglob /usr/local/bin/zest'"
+                    echo ""
+                fi
+            fi
+            rm -f "$WRAPPER_TMP" 2>/dev/null
+        fi
+    fi
+
+    touch "$SETUP_MARKER"
+fi
+
+# If launched from Finder, show dialog and exit (after first-run setup is complete)
+if [ "$LAUNCHED_FROM_FINDER" = true ]; then
+    osascript -e "display dialog \"Zest CLI ($PRODUCT_NAME) installed!
+
+Open Terminal and run:
+  zest list all files in Downloads
+
+Add to ~/.bashrc or ~/.zshrc (for using ? and * wildcards):
+  alias zest='noglob /usr/local/bin/zest'\" buttons {\"OK\"} default button \"OK\" with title \"Zest CLI\""
+    exit 0
+fi
+
+# Ensure model is in place (in case it was accidentally deleted)
+# Only auto-reinstall if not explicitly uninstalled by user
+UNINSTALL_MARKER="$HOME/.zest/.${PRODUCT_LOWER}_uninstalled"
+if [ ! -f "$MODEL_DEST" ] && [ -f "$MODEL_SRC" ] && [ ! -f "$UNINSTALL_MARKER" ]; then
     mkdir -p "$HOME/.zest"
-    echo "🍋 Installing Zest $PRODUCT_NAME model (first run only)..."
+    echo "🍋 Installing Zest $PRODUCT_NAME model..."
     cp "$MODEL_SRC" "$MODEL_DEST"
     echo "✅ Model installed."
+    # Remove uninstall marker since we're reinstalling
+    rm -f "$UNINSTALL_MARKER"
 fi
 
 # Run the CLI

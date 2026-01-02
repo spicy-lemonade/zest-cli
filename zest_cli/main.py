@@ -28,7 +28,6 @@ import requests
 import time
 import multiprocessing
 import re
-from llama_cpp import Llama
 
 # --- Configuration ---
 VERSION = "1.0.0"
@@ -322,11 +321,12 @@ def check_for_updates(product: str) -> None:
         pass
 
 
-def get_active_product() -> str:
+def get_active_product() -> str | None:
     """
     Determine which product to use.
     Priority: 1) User preference, 2) fp16 if available, 3) q5 if available
     Only considers products where the app bundle is installed (DMG mode).
+    Returns None if no models are installed.
     """
     config = load_config()
     preferred = config.get("active_product")
@@ -351,7 +351,7 @@ def get_active_product() -> str:
     if os.path.exists(MODEL_PATH_Q5):
         return "q5"
 
-    return "q5"  # Default
+    return None  # No models installed
 
 
 def get_hw_id():
@@ -413,17 +413,8 @@ def authenticate(product: str):
 
     # 2. Welcome/OTP Flow (For new devices or expired/revoked licenses)
 
-    # Check if model already exists (reinstall scenario)
-    if os.path.exists(model_path):
-        print(f"\n🍋 {product_name} model is already installed on this device.")
-        print("   Options:")
-        print("   1. Continue to re-activate license (keeps existing model)")
-        print("   2. Cancel")
-        choice = input("\n   Enter choice [1/2]: ").strip()
-        if choice != "1":
-            print("❌ Cancelled.")
-            sys.exit(0)
-        print()
+    # Model exists but no license - just proceed to activation
+    # (No need to prompt user, they clearly want to activate)
 
     print(f"🍋 Activation required for {product_name}.")
     email = input("Enter your purchase email: ").strip()
@@ -585,8 +576,11 @@ def suppress_c_logs():
         os.close(saved_stderr_fd)
 
 
-def load_model(product: str) -> Llama:
+def load_model(product: str):
     """Load the LLM model with GPU acceleration fallback to CPU."""
+    # Lazy import to speed up CLI startup for --help, --status, etc.
+    from llama_cpp import Llama
+
     model_path = PRODUCTS[product]["path"]
     if not os.path.exists(model_path):
         sys.stderr.write(f"❌ Error: Model not found at {model_path}\n")
@@ -610,7 +604,7 @@ def load_model(product: str) -> Llama:
             return Llama(**params, n_gpu_layers=0)
 
 def generate_command(
-    llm: Llama,
+    llm,
     query: str,
     history: list[tuple[str, str]] | None = None,
     base_temp: float = 0.2,
@@ -738,7 +732,38 @@ def handle_uninstall(product: str | None):
     """
     config = load_config()
     hw_id = get_hw_id()
-    products_to_uninstall = [product] if product else list(PRODUCTS.keys())
+
+    # If no product specified, check how many are installed and prompt
+    if product is None:
+        installed_products = [p for p in PRODUCTS.keys() if os.path.exists(PRODUCTS[p]["path"])]
+
+        if len(installed_products) == 0:
+            print("🍋 No Zest models are installed.")
+            return
+        elif len(installed_products) == 1:
+            product = installed_products[0]
+            products_to_uninstall = [product]
+        else:
+            # Both installed - prompt user
+            print("🍋 Both models are installed:")
+            print("   1. FP16 (Full Precision)")
+            print("   2. Q5 (Quantized)")
+            print("   3. Both")
+            print("")
+            choice = input("Which would you like to uninstall? [1/2/3]: ").strip()
+
+            if choice == "1":
+                products_to_uninstall = ["fp16"]
+            elif choice == "2":
+                products_to_uninstall = ["q5"]
+            elif choice == "3":
+                products_to_uninstall = list(PRODUCTS.keys())
+            else:
+                print("❌ Invalid choice. Cancelled.")
+                return
+    else:
+        products_to_uninstall = [product]
+
     any_uninstalled = False
 
     for p in products_to_uninstall:
@@ -774,6 +799,12 @@ def handle_uninstall(product: str | None):
                 os.remove(model_path)
                 print(f"🗑️  Deleted {PRODUCTS[p]['name']} model file.")
                 any_uninstalled = True
+
+                # Create uninstall marker to prevent auto-reinstall
+                marker_path = os.path.join(ZEST_DIR, f".{p}_uninstalled")
+                os.makedirs(ZEST_DIR, exist_ok=True)
+                with open(marker_path, "w") as f:
+                    f.write("")
             except OSError as e:
                 print(f"⚠️  Could not delete model file: {e}")
         elif product:  # Only show if specific product requested
@@ -889,7 +920,10 @@ def main():
             config = load_config()
             active = get_active_product()
             print(f"🍋 Zest Status (CLI v{VERSION})")
-            print(f"   Active model: {PRODUCTS[active]['name']}")
+            if active:
+                print(f"   Active model: {PRODUCTS[active]['name']}")
+            else:
+                print(f"   Active model: None (no models installed)")
             print("")
             for p, info in PRODUCTS.items():
                 installed = "✅" if os.path.exists(info["path"]) else "❌"
@@ -942,6 +976,18 @@ def main():
 
     # 2.5. Determine active product first (needed for orphan check)
     active_product = get_active_product()
+
+    # Check if no models are installed
+    if active_product is None:
+        print("❌ No Zest models are installed.")
+        print("")
+        print("To install Zest:")
+        print("  1. Download Zest-FP16.dmg or Zest-Q5.dmg")
+        print("  2. Drag the app to Applications")
+        print("  3. Run 'zest' from Terminal")
+        print("")
+        print("Visit https://zestcli.com for downloads")
+        sys.exit(1)
 
     # 2.6. Check for orphaned installations (app deleted but files remain)
     # Only checks the active product, and only if user had a previous license
