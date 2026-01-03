@@ -260,9 +260,18 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
             return https_fn.Response(f"Device already registered for {product}", status=200)
 
     if len(devices) >= MAX_DEVICES_PER_PRODUCT:
+        device_list = [
+            {"uuid": d["uuid"], "nickname": d.get("nickname", "Unknown device")}
+            for d in devices
+        ]
         return https_fn.Response(
-            f"Device limit reached for {product}. Use 'zest --uninstall --{product}' on another device.",
-            status=403
+            json.dumps({
+                "error": "device_limit_reached",
+                "message": f"Device limit reached ({len(devices)}/{MAX_DEVICES_PER_PRODUCT})",
+                "devices": device_list
+            }),
+            status=403,
+            content_type="application/json"
         )
 
     # Register device

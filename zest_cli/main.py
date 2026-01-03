@@ -109,8 +109,9 @@ def check_for_orphaned_installation(active_product: str) -> bool:
         if choice == "1":
             # Deregister from server
             email = license_data.get("email")
+            nickname = license_data.get("device_nickname", "this device")
             if email:
-                print(f"🌶  Deregistering device...", end="\r")
+                print(f"🌶  Deregistering \"{nickname}\"...", end="\r")
                 try:
                     res = requests.post(
                         f"{API_BASE}/deregister_device",
@@ -118,7 +119,7 @@ def check_for_orphaned_installation(active_product: str) -> bool:
                         timeout=10
                     )
                     if res.status_code == 200:
-                        print("\033[K🍋 Device deregistered.")
+                        print(f"\033[K🍋 \"{nickname}\" deregistered.")
                     else:
                         print(f"\033[K⚠️  Could not deregister: {res.text}")
                 except requests.exceptions.RequestException:
@@ -435,8 +436,15 @@ def authenticate(product: str):
     print("\033[K📧 Code sent!")
     code = input("Enter the 6-digit code: ").strip()
 
-    # Get device nickname from system
-    nickname = platform.node()
+    # Prompt for mandatory device nickname
+    print("")
+    print("💻 Enter a nickname for this device")
+    print("   (e.g., \"John's laptop\", \"Work MacBook\", \"Home iMac\")")
+    while True:
+        nickname = input("   Nickname: ").strip()
+        if nickname:
+            break
+        print("   ⚠️  Nickname is required. Please enter a name for this device.")
 
     # Final Verification and Device Registration
     verify_res = requests.post(
@@ -451,10 +459,66 @@ def authenticate(product: str):
     )
 
     if verify_res.status_code == 200:
-        config[product_key] = {"email": email, "last_verified": time.time()}
+        config[product_key] = {
+            "email": email,
+            "last_verified": time.time(),
+            "device_nickname": nickname
+        }
         save_config(config)
-        print(f"✅ Success! Device linked for {product_name}.")
+        print(f"✅ Success! Device \"{nickname}\" linked for {product_name}.")
         return True
+    elif verify_res.status_code == 403:
+        # Check if device limit reached
+        try:
+            error_data = verify_res.json()
+            if error_data.get("error") == "device_limit_reached":
+                devices = error_data.get("devices", [])
+                print(f"\n❌ Device limit reached ({len(devices)}/2).")
+                print("   Which device would you like to de-authorize to make room for this one?")
+                print("")
+                for i, device in enumerate(devices, 1):
+                    print(f"   {i}) {device['nickname']}")
+                print(f"   {len(devices) + 1}) Cancel")
+                print("")
+
+                while True:
+                    choice = input("   Enter choice: ").strip()
+                    if choice.isdigit():
+                        choice_num = int(choice)
+                        if 1 <= choice_num <= len(devices):
+                            old_device = devices[choice_num - 1]
+                            print(f"\n🌶  Replacing \"{old_device['nickname']}\"...", end="\r")
+                            replace_res = requests.post(
+                                f"{API_BASE}/replace_device",
+                                json={
+                                    "email": email,
+                                    "old_device_uuid": old_device["uuid"],
+                                    "new_device_uuid": hw_id,
+                                    "new_device_nickname": nickname,
+                                    "product": product
+                                },
+                                timeout=10
+                            )
+                            if replace_res.status_code == 200:
+                                config[product_key] = {
+                                    "email": email,
+                                    "last_verified": time.time(),
+                                    "device_nickname": nickname
+                                }
+                                save_config(config)
+                                print(f"\033[K✅ Device \"{nickname}\" registered, replacing \"{old_device['nickname']}\".")
+                                return True
+                            else:
+                                print(f"\033[K❌ Failed to replace device: {replace_res.text}")
+                                sys.exit(1)
+                        elif choice_num == len(devices) + 1:
+                            print("❌ Cancelled.")
+                            sys.exit(0)
+                    print(f"   Please enter a number between 1 and {len(devices) + 1}.")
+        except json.JSONDecodeError:
+            pass
+        print(f"❌ Activation failed: {verify_res.text}")
+        sys.exit(1)
     else:
         print(f"❌ Activation failed: {verify_res.text}")
         sys.exit(1)
@@ -702,8 +766,9 @@ def handle_logout(product: str | None):
             continue
 
         email = license_data.get("email")
+        nickname = license_data.get("device_nickname", "this device")
         if email:
-            print(f"🌶  Deregistering {PRODUCTS[p]['name']}...", end="\r")
+            print(f"🌶  Deregistering \"{nickname}\" from {PRODUCTS[p]['name']}...", end="\r")
             try:
                 res = requests.post(
                     f"{API_BASE}/deregister_device",
@@ -711,7 +776,7 @@ def handle_logout(product: str | None):
                     timeout=10
                 )
                 if res.status_code == 200:
-                    print(f"\033[K🍋 Device deregistered from {PRODUCTS[p]['name']} license.")
+                    print(f"\033[K🍋 \"{nickname}\" deregistered from {PRODUCTS[p]['name']} license.")
                 else:
                     print(f"\033[K⚠️  Could not deregister: {res.text}")
             except requests.exceptions.RequestException:
@@ -775,8 +840,9 @@ def handle_uninstall(product: str | None):
         # Deregister from server if we have license data
         if license_data:
             email = license_data.get("email")
+            nickname = license_data.get("device_nickname", "this device")
             if email:
-                print(f"🌶  Deregistering {PRODUCTS[p]['name']}...", end="\r")
+                print(f"🌶  Deregistering \"{nickname}\" from {PRODUCTS[p]['name']}...", end="\r")
                 try:
                     res = requests.post(
                         f"{API_BASE}/deregister_device",
@@ -784,7 +850,7 @@ def handle_uninstall(product: str | None):
                         timeout=10
                     )
                     if res.status_code == 200:
-                        print(f"\033[K🍋 Device deregistered from {PRODUCTS[p]['name']} license.")
+                        print(f"\033[K🍋 \"{nickname}\" deregistered from {PRODUCTS[p]['name']} license.")
                     else:
                         print(f"\033[K⚠️  Could not deregister: {res.text}")
                 except requests.exceptions.RequestException:
