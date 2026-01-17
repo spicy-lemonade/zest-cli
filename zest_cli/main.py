@@ -369,7 +369,7 @@ def show_trial_expired_prompt(product: str, email: str) -> bool:
     while True:
         choice = input("Enter choice [1/2/3]: ").strip()
         if choice == "1":
-            print("\n🌶 Getting checkout link...", end="\r")
+            print("\n🌶\033[0m Getting checkout link...", end="\r")
             try:
                 res = requests.post(
                     f"{API_BASE}/get_checkout_url",
@@ -419,7 +419,7 @@ def start_trial_flow(product: str) -> bool:
             print("❌ Please enter a valid email address.")
             continue
 
-        print(f"🌶 Sending verification code to {email}...", end="\r")
+        print(f"🌶\033[0m Sending verification code to {email}...", end="\r")
         try:
             otp_res = requests.post(
                 f"{API_BASE}/send_otp",
@@ -512,7 +512,7 @@ def start_trial_flow(product: str) -> bool:
             break
         print("   ⚠️  Nickname is required.")
 
-    print(f"\n🌶 Starting trial...", end="\r")
+    print(f"\n🌶\033[0m Starting trial...", end="\r")
     try:
         trial_res = requests.post(
             f"{API_BASE}/start_trial",
@@ -680,7 +680,7 @@ def authenticate(product: str):
             return True
 
         # Lease expired: Attempt silent background refresh via heartbeat
-        print("\033[K🌶 Refreshing license...", end="\r")
+        print("\033[K🌶\033[0m Refreshing license...", end="\r")
         try:
             res = requests.post(
                 f"{API_BASE}/license_heartbeat",
@@ -738,7 +738,7 @@ def authenticate(product: str):
     print(f"\n🍋 Activation required for {product_name}.")
     email = input("Enter your purchase email: ").strip()
 
-    print(f"🌶 Sending code to {email}...", end="\r")
+    print(f"🌶\033[0m Sending code to {email}...", end="\r")
     try:
         otp_res = requests.post(
             f"{API_BASE}/send_otp",
@@ -833,7 +833,7 @@ def authenticate(product: str):
                         choice_num = int(choice)
                         if 1 <= choice_num <= len(devices):
                             old_device = devices[choice_num - 1]
-                            print(f"\n🌶 Replacing \"{old_device['nickname']}\"...", end="\r")
+                            print(f"\n🌶\033[0m Replacing \"{old_device['nickname']}\"...", end="\r")
                             replace_res = requests.post(
                                 f"{API_BASE}/replace_device",
                                 json={
@@ -1137,7 +1137,7 @@ def handle_logout(product: str | None, remote: bool = False):
         email = license_data.get("email")
         nickname = license_data.get("device_nickname", "this device")
         if email:
-            print(f"🌶 Deregistering \"{nickname}\" from {PRODUCTS[p]['name']}...", end="\r")
+            print(f"🌶\033[0m Deregistering \"{nickname}\" from {PRODUCTS[p]['name']}...", end="\r")
             try:
                 res = requests.post(
                     f"{API_BASE}/deregister_device",
@@ -1192,7 +1192,7 @@ def handle_remote_logout(product: str | None):
     product_name = PRODUCTS[product]["name"]
 
     # Send OTP
-    print(f"\n🌶 Sending verification code to {email}...", end="\r")
+    print(f"\n🌶\033[0m Sending verification code to {email}...", end="\r")
     try:
         otp_res = requests.post(
             f"{API_BASE}/send_otp",
@@ -1213,7 +1213,7 @@ def handle_remote_logout(product: str | None):
         return
 
     # Get device list
-    print(f"\n🌶 Fetching registered devices...", end="\r")
+    print(f"\n🌶\033[0m Fetching registered devices...", end="\r")
     try:
         list_res = requests.post(
             f"{API_BASE}/list_devices",
@@ -1264,7 +1264,7 @@ def handle_remote_logout(product: str | None):
     selected_device = devices[choice_num - 1]
 
     # Deregister selected device
-    print(f"\n🌶 Deregistering \"{selected_device['nickname']}\"...", end="\r")
+    print(f"\n🌶\033[0m Deregistering \"{selected_device['nickname']}\"...", end="\r")
     try:
         dereg_res = requests.post(
             f"{API_BASE}/deregister_device",
@@ -1550,7 +1550,7 @@ def main():
     temp_increment = 0
 
     while True:
-        print(f"\033[K🌶 Thinking...", end="\r", flush=True)
+        print(f"\033[K🌶\033[0m Thinking...", end="\r", flush=True)
         command = generate_command(
             llm,
             query,

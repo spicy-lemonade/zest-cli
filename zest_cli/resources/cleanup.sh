@@ -100,7 +100,7 @@ uninstall_product() {
 
     if [ -n "$email" ]; then
         printf "\\033[K"
-        echo "🌶  Deregistering \"$nickname\" from $product_name..."
+        echo "🌶\033[0m  Deregistering \"$nickname\" from $product_name..."
         deregister_device "$email" "$product"
         echo "🍋 \"$nickname\" deregistered from $product_name license."
     fi
