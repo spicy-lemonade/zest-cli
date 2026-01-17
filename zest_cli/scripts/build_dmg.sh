@@ -11,18 +11,18 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 DIST_DIR="$PROJECT_DIR/dist"
 
-# This version MUST match the VERSION constant in main.py
+# This version MUST match the VERSION constant in config.py
 VERSION="1.0.0"
 APP_NAME="Zest"
 BUNDLE_ID="com.zestcli.zest"
 GCS_BUCKET="nlcli-models"
 
-# Verify version matches main.py
-MAIN_PY_VERSION=$(grep -m1 'VERSION = "' "$PROJECT_DIR/main.py" | sed 's/.*VERSION = "\([^"]*\)".*/\1/')
-if [ "$VERSION" != "$MAIN_PY_VERSION" ]; then
+# Verify version matches config.py
+CONFIG_PY_VERSION=$(grep -m1 'VERSION = "' "$PROJECT_DIR/config.py" | sed 's/.*VERSION = "\([^"]*\)".*/\1/')
+if [ "$VERSION" != "$CONFIG_PY_VERSION" ]; then
     echo "❌ Version mismatch!"
     echo "   build_dmg.sh: $VERSION"
-    echo "   main.py: $MAIN_PY_VERSION"
+    echo "   config.py: $CONFIG_PY_VERSION"
     echo "   Please update VERSION in both files to match."
     exit 1
 fi
@@ -129,9 +129,13 @@ cp -R "$BUILD_DIR/pyinstaller_dist/zest/_internal/"* "$APP_BUNDLE/Contents/Frame
 echo "📦 Copying model to bundle..."
 cp "$MODEL_PATH" "$APP_BUNDLE/Contents/Resources/$MODEL_NAME"
 
-# Copy main.py for standalone use (survives app deletion)
-echo "📝 Copying standalone CLI..."
-cp "$PROJECT_DIR/main.py" "$APP_BUNDLE/Contents/Resources/main.py"
+# Copy Python modules for standalone use (survives app deletion)
+echo "📝 Copying standalone CLI modules..."
+for pyfile in main.py config.py model.py commands.py auth.py trial.py activation.py; do
+    if [ -f "$PROJECT_DIR/$pyfile" ]; then
+        cp "$PROJECT_DIR/$pyfile" "$APP_BUNDLE/Contents/Resources/$pyfile"
+    fi
+done
 
 # Copy cleanup.sh for shell-based cleanup (no Python required)
 if [ -f "$PROJECT_DIR/resources/cleanup.sh" ]; then
@@ -227,8 +231,6 @@ fi
 
 MODEL_SRC="$RESOURCES_DIR/$MODEL_NAME"
 MODEL_DEST="$HOME/.zest/$MODEL_NAME"
-MAIN_PY_SRC="$RESOURCES_DIR/main.py"
-MAIN_PY_DEST="$HOME/.zest/main.py"
 
 # First-run setup
 SETUP_MARKER="$HOME/.zest/.${PRODUCT_LOWER}_setup_complete"
@@ -246,10 +248,12 @@ if [ ! -f "$SETUP_MARKER" ]; then
         echo "✅ Model installed."
     fi
 
-    # Copy standalone CLI for cleanup after app deletion
-    if [ -f "$MAIN_PY_SRC" ]; then
-        cp "$MAIN_PY_SRC" "$MAIN_PY_DEST"
-    fi
+    # Copy standalone CLI modules for cleanup after app deletion
+    for pyfile in main.py config.py model.py commands.py auth.py trial.py activation.py; do
+        if [ -f "$RESOURCES_DIR/$pyfile" ]; then
+            cp "$RESOURCES_DIR/$pyfile" "$HOME/.zest/$pyfile"
+        fi
+    done
 
     # Copy shell cleanup script (works without Python)
     CLEANUP_SRC="$RESOURCES_DIR/cleanup.sh"
