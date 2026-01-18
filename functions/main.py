@@ -19,11 +19,10 @@ VALID_PRODUCTS = ["lite", "hot", "extra_spicy"]
 TRIAL_DURATION_DAYS = 5
 
 # Polar.sh product IDs (from sandbox dashboard)
-# TODO: Update these with actual Polar product IDs for the new 3-tier structure
 POLAR_PRODUCT_IDS = {
-    "lite": "PLACEHOLDER_LITE_PRODUCT_ID",
-    "hot": "PLACEHOLDER_HOT_PRODUCT_ID",
-    "extra_spicy": "PLACEHOLDER_EXTRA_SPICY_PRODUCT_ID",
+    "lite": "1cb33873-4b44-4cda-83cb-511805e7f02c",
+    "hot": "47d61b83-33f5-45b4-8543-66a4d1afe8d6",
+    "extra_spicy": "8a5011a7-d888-4c3e-9086-bb1063f50b30",
 }
 
 
