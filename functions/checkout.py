@@ -5,6 +5,7 @@ Checkout and payment-related cloud functions for Zest CLI.
 import os
 import json
 import uuid
+import base64
 from datetime import datetime, timezone
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
@@ -128,7 +129,6 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Missing webhook headers", status=400)
 
     try:
-        import base64
         if webhook_secret.startswith("whsec_"):
             secret_for_verification = webhook_secret
         else:
@@ -144,7 +144,6 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
         print("Webhook signature verified successfully")
     except Exception as e:
         try:
-            import base64
             encoded_secret = base64.b64encode(webhook_secret.encode()).decode()
             secret_for_verification = f"whsec_{encoded_secret}"
             print(f"Retrying with base64 encoded secret, length={len(encoded_secret)}")

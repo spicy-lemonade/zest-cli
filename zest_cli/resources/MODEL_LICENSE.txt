@@ -8,20 +8,38 @@ This file contains licensing information for the AI model bundled with Zest CLI.
                               MODEL INFORMATION
 --------------------------------------------------------------------------------
 
-Model: Qwen3-4B (Quantized Q5_K_M)
-Base Model: Qwen/Qwen3-4B-Base
-Fine-tuned by: Spicy Lemonade (Zest CLI)
-Fine-tuning: Unix/macOS command generation
+Zest CLI includes three model tiers:
 
-This model has been fine-tuned on Unix and macOS commands to provide accurate
+ZEST LITE:
+  Model: Qwen3-4B (Quantized Q5_K_M)
+  Base Model: Qwen/Qwen3-4B-Base
+  Fine-tuned by: Spicy Lemonade (Zest CLI)
+  Fine-tuning: Unix/macOS command generation
+  Optimization: CPU-optimized for fast, efficient everyday CLI tasks
+
+ZEST HOT:
+  Model: Qwen2.5-coder-7b (Quantized Q5_K_M)
+  Base Model: Qwen/Qwen2.5-Coder-7B
+  Fine-tuned by: Spicy Lemonade (Zest CLI)
+  Fine-tuning: Unix/macOS command generation
+  Optimization: Balanced performance for complex logic and automation
+
+ZEST EXTRA SPICY:
+  Model: Qwen2.5-coder-7b (FP16)
+  Base Model: Qwen/Qwen2.5-Coder-7B
+  Fine-tuned by: Spicy Lemonade (Zest CLI)
+  Fine-tuning: Unix/macOS command generation
+  Optimization: Maximum precision for multi-step scripts and complex operations
+
+All models have been fine-tuned on Unix and macOS commands to provide accurate
 CLI command suggestions from natural language queries.
 
 --------------------------------------------------------------------------------
-                          ORIGINAL MODEL LICENSE
+                          ORIGINAL MODEL LICENSES
 --------------------------------------------------------------------------------
 
-The base model (Qwen3-4B-Base) is licensed under the Apache License 2.0 by
-Alibaba Cloud.
+The base models (Qwen3-4B-Base and Qwen2.5-Coder-7B) are licensed under the
+Apache License 2.0 by Alibaba Cloud.
 
                                  Apache License
                            Version 2.0, January 2004
@@ -204,28 +222,35 @@ Alibaba Cloud.
                               COPYRIGHT NOTICES
 --------------------------------------------------------------------------------
 
-Original Model:
-Copyright 2024 Alibaba Cloud
-Licensed under the Apache License, Version 2.0
+Original Models:
+  Qwen3-4B-Base: Copyright 2024 Alibaba Cloud
+  Qwen2.5-Coder-7B: Copyright 2024 Alibaba Cloud
+  Licensed under the Apache License, Version 2.0
 
-Fine-tuned Model and Zest CLI:
-Copyright 2025 Spicy Lemonade
+Fine-tuned Models and Zest CLI:
+Copyright 2026 Spicy Lemonade
 Licensed under the Apache License, Version 2.0
 
 --------------------------------------------------------------------------------
                                MODIFICATIONS
 --------------------------------------------------------------------------------
 
-This model has been modified from the original Qwen3-4B-Base as follows:
+These models have been modified from their original base models as follows:
 
-1. Quantization: The model has been quantized to Q5_K_M format using
-   llama.cpp for efficient inference on consumer hardware.
+1. Quantization:
+   - Zest Lite: Quantized to Q5_K_M format from Qwen3-4B-Base
+   - Zest Hot: Quantized to Q5_K_M format from Qwen2.5-Coder-7B
+   - Zest Extra Spicy: Maintained in FP16 format from Qwen2.5-Coder-7B
 
-2. Fine-tuning: The model has been fine-tuned on a curated dataset of
-   Unix and macOS commands to improve its ability to translate natural
+   Quantization performed using llama.cpp for efficient inference on
+   consumer hardware.
+
+2. Fine-tuning: All models have been fine-tuned on a curated dataset of
+   Unix and macOS commands to improve their ability to translate natural
    language queries into executable CLI commands.
 
-3. Optimization: The model has been optimized for the Zest CLI use case,
-   specifically for generating single-line shell commands.
+3. Optimization: All models have been optimized for the Zest CLI use case,
+   specifically for generating single-line shell commands with varying
+   levels of complexity based on the model tier.
 
 ================================================================================
