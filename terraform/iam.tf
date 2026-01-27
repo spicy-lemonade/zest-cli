@@ -64,3 +64,35 @@ resource "google_project_iam_member" "ml_engineers_datastore_prod" {
   role    = "roles/datastore.user"
   member  = "group:${var.ml_group_email}"
 }
+
+# SERVICE ACCOUNTS FOR CLOUD FUNCTIONS
+
+# DEV PROJECT - Cloud Functions Service Account
+resource "google_service_account" "cloud_functions_dev" {
+  project      = var.project_id_dev
+  account_id   = "cloud-functions-sa"
+  display_name = "Cloud Functions Service Account"
+  description  = "Service account for Cloud Functions with minimal Firestore permissions"
+}
+
+# Grant Firestore access to Cloud Functions service account - Dev
+resource "google_project_iam_member" "cloud_functions_datastore_dev" {
+  project = var.project_id_dev
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_functions_dev.email}"
+}
+
+# PROD PROJECT - Cloud Functions Service Account
+resource "google_service_account" "cloud_functions_prod" {
+  project      = var.project_id_prod
+  account_id   = "cloud-functions-sa"
+  display_name = "Cloud Functions Service Account"
+  description  = "Service account for Cloud Functions with minimal Firestore permissions"
+}
+
+# Grant Firestore access to Cloud Functions service account - Prod
+resource "google_project_iam_member" "cloud_functions_datastore_prod" {
+  project = var.project_id_prod
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_functions_prod.email}"
+}

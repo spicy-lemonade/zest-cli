@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
 
-from config import VALID_PRODUCTS, TRIAL_DURATION_DAYS
+from config import VALID_PRODUCTS, TRIAL_DURATION_DAYS, SERVICE_ACCOUNT_EMAIL
 from helpers import (
     get_product_fields,
     get_trial_fields,
@@ -22,6 +22,7 @@ from helpers import (
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def start_trial(req: https_fn.Request) -> https_fn.Response:
     """
@@ -173,6 +174,7 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def check_trial_status(req: https_fn.Request) -> https_fn.Response:
     """

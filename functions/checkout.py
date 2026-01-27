@@ -12,7 +12,7 @@ from firebase_admin import firestore
 from polar_sdk import Polar
 from standardwebhooks.webhooks import Webhook
 
-from config import POLAR_PRODUCT_IDS
+from config import POLAR_PRODUCT_IDS, SERVICE_ACCOUNT_EMAIL
 from helpers import get_product_fields
 
 
@@ -23,6 +23,7 @@ from helpers import get_product_fields
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def create_checkout(req: https_fn.Request) -> https_fn.Response:
     """
@@ -105,6 +106,7 @@ def create_checkout(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def polar_webhook(req: https_fn.Request) -> https_fn.Response:
     """
@@ -246,6 +248,7 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def get_checkout_url(req: https_fn.Request) -> https_fn.Response:
     """

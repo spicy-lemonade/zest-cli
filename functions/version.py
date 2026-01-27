@@ -6,7 +6,7 @@ import json
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
 
-from config import VALID_PRODUCTS, MODEL_FILES, GCS_BUCKET
+from config import VALID_PRODUCTS, MODEL_FILES, GCS_BUCKET, SERVICE_ACCOUNT_EMAIL
 
 
 @https_fn.on_request(
@@ -15,6 +15,7 @@ from config import VALID_PRODUCTS, MODEL_FILES, GCS_BUCKET
         cors_origins="*",
         cors_methods=["GET", "POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def check_version(req: https_fn.Request) -> https_fn.Response:
     """

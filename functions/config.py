@@ -2,6 +2,14 @@
 Shared configuration constants for Zest CLI cloud functions.
 """
 
+import os
+
+# Service account configuration
+# Automatically construct the service account email from the project ID
+# The service account is created by Terraform as "cloud-functions-sa"
+_project_id = os.environ.get("GCLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
+SERVICE_ACCOUNT_EMAIL = f"cloud-functions-sa@{_project_id}.iam.gserviceaccount.com" if _project_id else None
+
 # License configuration
 MAX_DEVICES_PER_PRODUCT = 2
 OTP_EXPIRY_MINUTES = 10

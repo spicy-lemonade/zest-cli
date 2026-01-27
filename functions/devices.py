@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
 
-from config import VALID_PRODUCTS
+from config import VALID_PRODUCTS, SERVICE_ACCOUNT_EMAIL
 from helpers import get_product_fields, get_trial_status
 
 
@@ -17,6 +17,7 @@ from helpers import get_product_fields, get_trial_status
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def validate_device(req: https_fn.Request) -> https_fn.Response:
     """
@@ -104,6 +105,7 @@ def validate_device(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def replace_device(req: https_fn.Request) -> https_fn.Response:
     """
@@ -164,6 +166,7 @@ def replace_device(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def list_devices(req: https_fn.Request) -> https_fn.Response:
     """
@@ -241,6 +244,7 @@ def list_devices(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def deregister_device(req: https_fn.Request) -> https_fn.Response:
     """
@@ -286,6 +290,7 @@ def deregister_device(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def license_heartbeat(req: https_fn.Request) -> https_fn.Response:
     """

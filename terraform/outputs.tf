@@ -97,3 +97,13 @@ output "models_public_url" {
   description = "Public HTTPS URL for downloading models"
   value       = "https://storage.googleapis.com/${google_storage_bucket.nlcli_models.name}"
 }
+
+output "cloud_functions_service_account_dev" {
+  description = "Service account email for Cloud Functions in dev environment"
+  value       = google_service_account.cloud_functions_dev.email
+}
+
+output "cloud_functions_service_account_prod" {
+  description = "Service account email for Cloud Functions in prod environment"
+  value       = google_service_account.cloud_functions_prod.email
+}

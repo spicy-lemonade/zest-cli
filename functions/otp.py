@@ -15,6 +15,7 @@ from config import (
     MAX_DEVICES_PER_PRODUCT,
     OTP_EXPIRY_MINUTES,
     VALID_PRODUCTS,
+    SERVICE_ACCOUNT_EMAIL,
 )
 from helpers import (
     get_product_fields,
@@ -30,6 +31,7 @@ from helpers import (
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def send_otp(req: https_fn.Request) -> https_fn.Response:
     """
@@ -235,6 +237,7 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
         cors_origins="*",
         cors_methods=["POST"],
     ),
+    service_account=SERVICE_ACCOUNT_EMAIL,
 )
 def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
     """
