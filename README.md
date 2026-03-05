@@ -1,6 +1,6 @@
 # 🌶️ Zest CLI from Spicy Lemonade 🍋
 
-#### Small language models. Runs offline. Runs on CPU. No cloud. No API keys. Privacy first. No tracking. No logging.
+#### Small language models. Runs offline. Runs on CPU. No cloud. No API keys. Privacy first. No tracking.
 ![spicy](https://github.com/user-attachments/assets/9c3d925d-5c7b-44ed-a2c8-b73e5a897895)
 
 Zest CLI translates natural language into shell commands using local small language models. macOS only. Learn more at [zestcli.com](https://zestcli.com).
@@ -14,7 +14,6 @@ Zest CLI translates natural language into shell commands using local small langu
 - **No API keys** — no accounts, tokens, or subscriptions required
 - **Privacy first** — your commands and queries never leave your device
 - **No tracking** — zero telemetry, user data, or usage data collection
-- **No logging** — your commands and queries are not recorded or stored anywhere
 
 ## 🏗 Architecture & Data Flow
 
