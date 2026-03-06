@@ -82,6 +82,20 @@ resource "google_project_iam_member" "cloud_functions_datastore_dev" {
   member  = "serviceAccount:${google_service_account.cloud_functions_dev.email}"
 }
 
+# Grant Cloud Functions SA permission to read shared models bucket - Dev
+resource "google_storage_bucket_iam_member" "cloud_functions_models_viewer_dev" {
+  bucket = google_storage_bucket.nlcli_models.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.cloud_functions_dev.email}"
+}
+
+# Grant Cloud Functions SA permission to sign URLs (required for signed URL generation) - Dev
+resource "google_service_account_iam_member" "cloud_functions_token_creator_dev" {
+  service_account_id = google_service_account.cloud_functions_dev.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.cloud_functions_dev.email}"
+}
+
 # PROD PROJECT - Cloud Functions Service Account
 resource "google_service_account" "cloud_functions_prod" {
   project      = var.project_id_prod
@@ -95,4 +109,18 @@ resource "google_project_iam_member" "cloud_functions_datastore_prod" {
   project = var.project_id_prod
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.cloud_functions_prod.email}"
+}
+
+# Grant Cloud Functions SA permission to read models bucket - Prod
+resource "google_storage_bucket_iam_member" "cloud_functions_models_viewer_prod" {
+  bucket = google_storage_bucket.nlcli_models.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.cloud_functions_prod.email}"
+}
+
+# Grant Cloud Functions SA permission to sign URLs (required for signed URL generation) - Prod
+resource "google_service_account_iam_member" "cloud_functions_token_creator_prod" {
+  service_account_id = google_service_account.cloud_functions_prod.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.cloud_functions_prod.email}"
 }

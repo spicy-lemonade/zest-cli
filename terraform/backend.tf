@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = "nlcli-terraform-state-<ZEST_PROJECT_ID>"
+    bucket = "nlcli-terraform-state-nl-cli"
     prefix = "nlcli-wizard/state"
   }
 }

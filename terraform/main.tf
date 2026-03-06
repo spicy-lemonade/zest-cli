@@ -180,9 +180,39 @@ resource "google_storage_bucket" "nlcli_models" {
   }
 }
 
-# Make the models bucket publicly readable for user downloads
-resource "google_storage_bucket_iam_member" "nlcli_models_public_read" {
-  bucket = google_storage_bucket.nlcli_models.name
+resource "google_storage_bucket" "nlcli_downloads" {
+  name          = "nlcli-downloads"
+  location      = "US"
+  storage_class = "STANDARD"
+  project       = var.project_id_prod
+
+  uniform_bucket_level_access = true
+
+  versioning {
+    enabled = true
+  }
+
+  # Keep only 1 previous version for rollback (current + 1 old)
+  lifecycle_rule {
+    condition {
+      num_newer_versions = 1
+      with_state         = "ARCHIVED"
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  labels = {
+    environment = var.environment
+    project     = "nlcli-wizard"
+    purpose     = "dmg-distribution"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "nlcli_downloads_public_read" {
+  bucket = google_storage_bucket.nlcli_downloads.name
   role   = "roles/storage.objectViewer"
   member = "allUsers"
 }
+
