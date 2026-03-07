@@ -150,7 +150,7 @@ resource "google_storage_bucket" "nlcli_ml_training_mart" {
 }
 
 resource "google_storage_bucket" "nlcli_models" {
-  name          = "nlcli-models"
+  name          = var.models_bucket_name
   location      = "US"  # Multi-region for fast global downloads (US has best global latency)
   storage_class = "STANDARD"
   project       = var.project_id_prod
@@ -181,7 +181,7 @@ resource "google_storage_bucket" "nlcli_models" {
 }
 
 resource "google_storage_bucket" "nlcli_downloads" {
-  name          = "nlcli-downloads"
+  name          = var.downloads_bucket_name
   location      = "US"
   storage_class = "STANDARD"
   project       = var.project_id_prod

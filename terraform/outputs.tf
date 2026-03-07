@@ -93,8 +93,8 @@ output "models_bucket_url" {
   value       = google_storage_bucket.nlcli_models.url
 }
 
-output "models_public_url" {
-  description = "Public HTTPS URL for downloading models"
+output "models_https_url" {
+  description = "HTTPS URL for the models bucket (requires signed URL or appropriate IAM for access)"
   value       = "https://storage.googleapis.com/${google_storage_bucket.nlcli_models.name}"
 }
 

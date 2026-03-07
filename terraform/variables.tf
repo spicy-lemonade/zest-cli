@@ -47,3 +47,13 @@ variable "ml_group_email" {
   description = "Google Group email for ML engineers (set in terraform.tfvars)"
   type        = string
 }
+
+variable "models_bucket_name" {
+  description = "Name of the GCS bucket for model files (set in terraform.tfvars)"
+  type        = string
+}
+
+variable "downloads_bucket_name" {
+  description = "Name of the GCS bucket for DMG downloads (set in terraform.tfvars)"
+  type        = string
+}
