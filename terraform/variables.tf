@@ -26,12 +26,6 @@ variable "bucket_suffix" {
   default     = ""
 }
 
-variable "data_retention_days" {
-  description = "Number of days to retain data before lifecycle deletion (0 = no deletion)"
-  type        = number
-  default     = 0
-}
-
 variable "enable_versioning" {
   description = "Enable object versioning on the bucket"
   type        = bool
