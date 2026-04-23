@@ -93,6 +93,11 @@ resource "google_storage_bucket" "nlcli_ml_training_staging" {
 
   uniform_bucket_level_access = true
 
+  autoclass {
+    enabled                = true
+    terminal_storage_class = "ARCHIVE"
+  }
+
   versioning {
     enabled = var.enable_versioning
   }
@@ -125,6 +130,11 @@ resource "google_storage_bucket" "nlcli_ml_training_mart" {
 
   uniform_bucket_level_access = true
 
+  autoclass {
+    enabled                = true
+    terminal_storage_class = "ARCHIVE"
+  }
+
   versioning {
     enabled = var.enable_versioning
   }
@@ -151,15 +161,15 @@ resource "google_storage_bucket" "nlcli_ml_training_mart" {
 
 resource "google_storage_bucket" "nlcli_models" {
   name          = var.models_bucket_name
-  location      = "US"  # Multi-region for fast global downloads (US has best global latency)
+  location      = "US" # Multi-region for fast global downloads (US has best global latency)
   storage_class = "STANDARD"
   project       = var.project_id_prod
-  force_destroy = true  # Allow deletion even with objects (for migration)
+  force_destroy = true
 
   uniform_bucket_level_access = true
 
   versioning {
-    enabled = true  # Keep old model versions for rollback
+    enabled = true # Keep old model versions for rollback
   }
 
   # Keep only 1 previous version for rollback (current + 1 old)
