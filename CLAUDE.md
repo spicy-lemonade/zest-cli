@@ -1,16 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
-
 ## Important Rules
 
-- *Never* run git commands without asking for user permission, even if 'auto-accept' is selected during a Claude Command session
-- *Never* run `terraform apply` or `terraform destroy` without explicit user permission
-- *Never* modify infrastructure state or cloud resources without asking for user permission
+- *Never* run git commands without asking for user permission, even if 'auto-accept' is selected during a Claude Command session.
+- *Never* run `terraform apply` or `terraform destroy` without explicit user permission.
+- *Never* modify infrastructure state or cloud resources without asking for user permission.
 - *Never* make assumptions. Ask for more information and wait for the user response.
-- Do *not* use numerical prefixes when writing comments
-- Use double quotation marks instead of single quotation marks when possible
-- Favor modular, reusable code
+- Do *not* use numerical prefixes when writing comments.
+- Use double quotation marks instead of single quotation marks when possible.
+- Favor modular, reusable code.
 - Keep Files Small. A single source file should generally not exceed a few hundred lines. If a file grows beyond this size, it is a strong signal to split it along clear conceptual or responsibility boundaries into multiple files.
 
 
