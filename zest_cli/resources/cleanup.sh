@@ -21,10 +21,14 @@ get_hw_id() {
     ioreg -d2 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/{print $(NF-1)}'
 }
 
-# Read license data
+# Read license data. Written as if/then (not "grep && echo") so a normal
+# no-license-yet case returns 0, not 1 -- with `set -e`, a bare "grep && echo"
+# here would silently kill the whole script whenever there's no license yet.
 read_license() {
     if [ -f "$CONFIG_FILE" ]; then
-        grep -q '"license"' "$CONFIG_FILE" 2>/dev/null && echo "exists"
+        if grep -q '"license"' "$CONFIG_FILE" 2>/dev/null; then
+            echo "exists"
+        fi
     fi
 }
 
@@ -256,8 +260,15 @@ main() {
     # Check for orphan situation
     handle_orphan
 
-    # If we get here, app is deleted but user didn't choose cleanup
-    # Show helpful message
+    # handle_orphan only returns (rather than exiting) when it wasn't an
+    # orphan case after all -- e.g. the app is actually installed, so there's
+    # nothing for this shell fallback to do.
+    if [ -d "$APP_PATH" ]; then
+        exit 0
+    fi
+
+    # App is genuinely missing and this wasn't detected as a DMG-installed
+    # orphan. Show a helpful message.
     echo ""
     echo "⚠️  Zest app bundle not found."
     echo "   The model exists but the app is missing."
