@@ -195,13 +195,17 @@ if [ ! -f "$SETUP_MARKER" ]; then
         chmod +x "$CLEANUP_DEST"
     fi
 
-    # Create (or refresh) wrapper script at /usr/local/bin/zest.
-    # Always overwritten here, even if one already exists: a wrapper left
-    # over from an older install (pre-single-product) points at app bundle
-    # names that no longer exist, and would otherwise be silently stuck.
-    WRAPPER_PATH="/usr/local/bin/zest"
+    touch "$SETUP_MARKER"
+fi
+
+# Ensure the CLI wrapper points at this app. Checked on every launch, not
+# just first-run: dragging the app to the Trash (instead of running
+# `zest --uninstall`) leaves .setup_complete in ~/.zest in place, so
+# first-run setup alone would never repair a wrapper left over from an
+# older install (e.g. one still pointing at Zest-Lite.app/Zest-Hot.app).
+WRAPPER_PATH="/usr/local/bin/zest"
+if [ ! -f "$WRAPPER_PATH" ] || ! grep -q '/Applications/Zest.app' "$WRAPPER_PATH" 2>/dev/null; then
     WRAPPER_TMP="/tmp/zest_wrapper_$$"
-    # Create temp file in /tmp (always writable)
     cat > "$WRAPPER_TMP" << 'WRAPPER_EOF'
 #!/bin/bash
 # Zest CLI Wrapper - Survives app deletion for cleanup
@@ -252,8 +256,6 @@ WRAPPER_EOF
         fi
         rm -f "$WRAPPER_TMP" 2>/dev/null
     fi
-
-    touch "$SETUP_MARKER"
 fi
 
 # If launched from Finder, show dialog and exit (after first-run setup is complete)
