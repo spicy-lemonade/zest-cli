@@ -171,32 +171,36 @@ if [ $# -eq 0 ]; then
     fi
 fi
 
-# First-run setup
+# Keep the standalone fallback files (used for cleanup after the app is
+# deleted) in sync with this app on every launch, not just first-run: an
+# uninstall that ran before the model finished downloading never clears
+# .setup_complete (see uninstall_zest in cleanup.sh), so gating this copy
+# behind that marker left main.py/cleanup.sh stale or missing entirely
+# after a reinstall -- `zest --uninstall` would then fail with "Cleanup
+# script not found."
 SETUP_MARKER="$HOME/.zest/.setup_complete"
 UNINSTALL_MARKER="$HOME/.zest/.uninstalled"
-if [ ! -f "$SETUP_MARKER" ]; then
-    mkdir -p "$HOME/.zest"
+mkdir -p "$HOME/.zest"
 
-    # Remove uninstall marker if present (user is reinstalling)
-    rm -f "$UNINSTALL_MARKER"
+# Remove uninstall marker if present (user is reinstalling)
+rm -f "$UNINSTALL_MARKER"
 
-    # Copy standalone CLI modules for cleanup after app deletion
-    for pyfile in main.py config.py model.py commands.py auth.py trial.py activation.py; do
-        if [ -f "$RESOURCES_DIR/$pyfile" ]; then
-            cp "$RESOURCES_DIR/$pyfile" "$HOME/.zest/$pyfile"
-        fi
-    done
-
-    # Copy shell cleanup script (works without Python)
-    CLEANUP_SRC="$RESOURCES_DIR/cleanup.sh"
-    CLEANUP_DEST="$HOME/.zest/cleanup.sh"
-    if [ -f "$CLEANUP_SRC" ]; then
-        cp "$CLEANUP_SRC" "$CLEANUP_DEST"
-        chmod +x "$CLEANUP_DEST"
+# Copy standalone CLI modules for cleanup after app deletion
+for pyfile in main.py config.py model.py commands.py auth.py trial.py activation.py; do
+    if [ -f "$RESOURCES_DIR/$pyfile" ]; then
+        cp "$RESOURCES_DIR/$pyfile" "$HOME/.zest/$pyfile"
     fi
+done
 
-    touch "$SETUP_MARKER"
+# Copy shell cleanup script (works without Python)
+CLEANUP_SRC="$RESOURCES_DIR/cleanup.sh"
+CLEANUP_DEST="$HOME/.zest/cleanup.sh"
+if [ -f "$CLEANUP_SRC" ]; then
+    cp "$CLEANUP_SRC" "$CLEANUP_DEST"
+    chmod +x "$CLEANUP_DEST"
 fi
+
+touch "$SETUP_MARKER"
 
 # Ensure the CLI wrapper points at this app. Checked on every launch, not
 # just first-run: dragging the app to the Trash (instead of running

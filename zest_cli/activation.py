@@ -234,6 +234,11 @@ def handle_logout(remote: bool = False):
     license_data = config.get("license")
 
     if not license_data:
+        trial_data = config.get("trial")
+        if trial_data and trial_data.get("is_trial"):
+            print("🍋 You're on a free trial, not a paid license.")
+            print("   Trials can't be logged out early -- they expire automatically.")
+            return
         print("🍋 Not logged in on this device.")
         print("   Use --logout --remote to log out a device remotely.")
         return
