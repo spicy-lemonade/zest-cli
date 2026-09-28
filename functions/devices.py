@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
 
-from config import VALID_PRODUCTS, SERVICE_ACCOUNT_EMAIL
+from config import SERVICE_ACCOUNT_EMAIL
 from helpers import (
-    get_product_fields,
+    PAID_FIELD,
+    DEVICES_FIELD,
     get_trial_status,
     check_otp_verify_attempt,
     reset_otp_verify_attempts,
@@ -27,9 +28,9 @@ from helpers import (
 )
 def validate_device(req: https_fn.Request) -> https_fn.Response:
     """
-    Validate that a device is registered and licensed for a specific product.
+    Validate that a device is registered and licensed.
     Supports both paid licenses and active trials.
-    Expects JSON: {"email": "...", "device_uuid": "uuid", "product": "lite", "hot", or "extra_spicy"}
+    Expects JSON: {"email": "...", "device_uuid": "uuid"}
 
     Returns JSON with status:
     - "valid": Paid license, device registered
@@ -44,15 +45,9 @@ def validate_device(req: https_fn.Request) -> https_fn.Response:
 
     email = data.get("email")
     device_uuid = data.get("device_uuid")
-    product = data.get("product", "lite")
 
     if not email or not device_uuid:
         return https_fn.Response("Missing email or device_uuid", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    paid_field, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -66,10 +61,10 @@ def validate_device(req: https_fn.Request) -> https_fn.Response:
         )
 
     license_data = doc.to_dict()
-    trial_status_result = get_trial_status(license_data, product)
+    trial_status_result = get_trial_status(license_data)
 
     if trial_status_result["status"] == "paid":
-        devices = license_data.get(devices_field, [])
+        devices = license_data.get(DEVICES_FIELD, [])
         for device in devices:
             if device["uuid"] == device_uuid:
                 return https_fn.Response(
@@ -115,9 +110,9 @@ def validate_device(req: https_fn.Request) -> https_fn.Response:
 )
 def replace_device(req: https_fn.Request) -> https_fn.Response:
     """
-    Replace an old device with a new one for a specific product.
+    Replace an old device with a new one.
     Expects JSON: {"email": "...", "old_device_uuid": "uuid", "new_device_uuid": "uuid",
-                   "new_device_nickname": "New Mac", "product": "lite", "hot", or "extra_spicy"}
+                   "new_device_nickname": "New Mac"}
     """
     try:
         data = req.get_json()
@@ -128,15 +123,9 @@ def replace_device(req: https_fn.Request) -> https_fn.Response:
     old_device_uuid = data.get("old_device_uuid")
     new_device_uuid = data.get("new_device_uuid")
     new_device_nickname = data.get("new_device_nickname")
-    product = data.get("product", "lite")
 
     if not all([email, old_device_uuid, new_device_uuid, new_device_nickname]):
         return https_fn.Response("Missing required fields", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    _, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -146,7 +135,7 @@ def replace_device(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("No license found", status=404)
 
     license_data = doc.to_dict()
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get(DEVICES_FIELD, [])
 
     devices = [d for d in devices if d["uuid"] != old_device_uuid]
     now = datetime.now(timezone.utc)
@@ -160,10 +149,10 @@ def replace_device(req: https_fn.Request) -> https_fn.Response:
     })
 
     doc_ref.update({
-        devices_field: devices,
+        DEVICES_FIELD: devices,
         f"device_nicknames.{new_device_uuid}": new_device_nickname
     })
-    return https_fn.Response(f"Device replaced for {product}", status=200)
+    return https_fn.Response("Device replaced", status=200)
 
 
 @https_fn.on_request(
@@ -176,9 +165,9 @@ def replace_device(req: https_fn.Request) -> https_fn.Response:
 )
 def list_devices(req: https_fn.Request) -> https_fn.Response:
     """
-    List all registered devices for a user's product license.
+    List all registered devices for a user's license.
     Requires OTP verification for security.
-    Expects JSON: {"email": "...", "otp": "123456", "product": "lite", "hot", or "extra_spicy"}
+    Expects JSON: {"email": "...", "otp": "123456"}
     Returns JSON: {"devices": [{"uuid": "...", "nickname": "...", "registered_at": "..."}]}
     """
     try:
@@ -188,15 +177,9 @@ def list_devices(req: https_fn.Request) -> https_fn.Response:
 
     email = data.get("email")
     otp = data.get("otp")
-    product = data.get("product", "lite")
 
     if not email or not otp:
         return https_fn.Response("Missing email or otp", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    paid_field, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -227,10 +210,10 @@ def list_devices(req: https_fn.Request) -> https_fn.Response:
 
     reset_otp_verify_attempts(db, email)
 
-    if not license_data.get(paid_field):
-        return https_fn.Response(f"No {product} license found", status=403)
+    if not license_data.get(PAID_FIELD):
+        return https_fn.Response("No license found", status=403)
 
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get(DEVICES_FIELD, [])
     device_list = [
         {
             "uuid": d["uuid"],
@@ -262,8 +245,8 @@ def list_devices(req: https_fn.Request) -> https_fn.Response:
 )
 def deregister_device(req: https_fn.Request) -> https_fn.Response:
     """
-    Remove a device from the license for a specific product.
-    Expects JSON: {"email": "...", "device_uuid": "uuid", "product": "lite", "hot", or "extra_spicy"}
+    Remove a device from the license.
+    Expects JSON: {"email": "...", "device_uuid": "uuid"}
     """
     try:
         data = req.get_json()
@@ -272,15 +255,9 @@ def deregister_device(req: https_fn.Request) -> https_fn.Response:
 
     email = data.get("email")
     device_uuid = data.get("device_uuid")
-    product = data.get("product", "lite")
 
     if not email or not device_uuid:
         return https_fn.Response("Missing email or device_uuid", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    _, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -290,12 +267,12 @@ def deregister_device(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("No license found", status=404)
 
     license_data = doc.to_dict()
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get(DEVICES_FIELD, [])
 
     devices = [d for d in devices if d["uuid"] != device_uuid]
 
-    doc_ref.update({devices_field: devices})
-    return https_fn.Response(f"Device deregistered from {product}", status=200)
+    doc_ref.update({DEVICES_FIELD: devices})
+    return https_fn.Response("Device deregistered", status=200)
 
 
 @https_fn.on_request(
@@ -309,8 +286,8 @@ def deregister_device(req: https_fn.Request) -> https_fn.Response:
 def license_heartbeat(req: https_fn.Request) -> https_fn.Response:
     """
     Biweekly license validation ping from the CLI.
-    Updates last_validated timestamp for the device for a specific product.
-    Expects JSON: {"email": "...", "device_uuid": "uuid", "product": "lite", "hot", or "extra_spicy"}
+    Updates last_validated timestamp for the device.
+    Expects JSON: {"email": "...", "device_uuid": "uuid"}
 
     The CLI should call this every 2 weeks. If the ping fails due to network
     issues, the CLI can continue operating using cached validation.
@@ -322,15 +299,9 @@ def license_heartbeat(req: https_fn.Request) -> https_fn.Response:
 
     email = data.get("email")
     device_uuid = data.get("device_uuid")
-    product = data.get("product", "lite")
 
     if not email or not device_uuid:
         return https_fn.Response("Missing email or device_uuid", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    paid_field, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -341,10 +312,10 @@ def license_heartbeat(req: https_fn.Request) -> https_fn.Response:
 
     license_data = doc.to_dict()
 
-    if not license_data.get(paid_field):
-        return https_fn.Response(f"No {product} license found", status=403)
+    if not license_data.get(PAID_FIELD):
+        return https_fn.Response("No license found", status=403)
 
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get(DEVICES_FIELD, [])
     device_found = False
     now = datetime.now(timezone.utc)
 
@@ -356,12 +327,11 @@ def license_heartbeat(req: https_fn.Request) -> https_fn.Response:
             break
 
     if not device_found:
-        return https_fn.Response(f"Device not registered for {product}", status=403)
+        return https_fn.Response("Device not registered", status=403)
 
-    doc_ref.update({devices_field: devices})
+    doc_ref.update({DEVICES_FIELD: devices})
     return https_fn.Response(json.dumps({
         "status": "valid",
-        "product": product,
         "validated_at": now.isoformat(),
         "validated_at_unix": int(now.timestamp())
     }), status=200, content_type="application/json")

@@ -8,10 +8,9 @@ Licensed version of Zest with 2-device activation, OTP verification, and macOS p
 zest_cli/
 ├── main.py                 # Licensed CLI with activation flow
 ├── requirements.txt        # Python dependencies
-├── build.sh               # PyInstaller build script
-├── create_installer.sh    # .pkg installer creator
-├── test/                  # Test utilities
-└── README.md             # This file
+├── scripts/build_dmg.sh    # DMG build script
+├── resources/              # Cleanup script, install guide, model license
+└── README.md               # This file
 ```
 
 ## 🚀 Quick Start
@@ -67,8 +66,7 @@ python main.py zest show me all running docker containers
 
 5. **Build for distribution**:
    ```bash
-   ./build.sh                  # Creates .app bundle
-   ./create_installer.sh       # Creates .pkg installer
+   ./scripts/build_dmg.sh
    ```
 
 ## 🔐 How It Works
@@ -84,7 +82,7 @@ python main.py zest show me all running docker containers
 Commands that work even after uninstalling (via standalone `main.py` fallback):
 
 ### `zest --status`
-Shows installation and license status for all products:
+Shows installation and license status:
 ```bash
 zest --status
 ```
@@ -92,27 +90,17 @@ zest --status
 **Example output**:
 ```
 🍋 Zest Status (CLI v1.0.0)
-   Active model: Extra Spicy (Qwen2.5 Coder 14B Q5)
-
-   Lite (Qwen2.5 Coder 7B Q5):
-      Installed: ❌ | Licensed: ❌ | Model v1.0.0
-   Hot (Qwen2.5 Coder 7B FP16):
-      Installed: ❌ | Licensed: ❌ | Model v1.0.0
-   Extra Spicy (Qwen2.5 Coder 14B Q5):
-      Installed: ✅ | Licensed: ✅ | Model v1.0.0
+   Installed: ✅ | Licensed: ✅ | Model v1.0.0
 ```
 
 ### `zest --logout`
-Deregisters device and removes license data, but **keeps model files** on disk. Frees up a device slot on your account.
+Deregisters device and removes license data, but **keeps the model file** on disk. Frees up a device slot on your account.
 
 ```bash
-# Logout from all products
 zest --logout
 
-# Logout from specific product
-zest --logout --base
-zest --logout --mid
-zest --logout --pro
+# Log out any device remotely (requires OTP)
+zest --logout --remote
 ```
 
 **What gets removed**:
@@ -120,33 +108,27 @@ zest --logout --pro
 - Device registration on server
 
 **What stays**:
-- Model files in `~/.zest/`
+- Model file in `~/.zest/`
 - App bundle in `/Applications/`
 - CLI wrapper at `/usr/local/bin/zest`
 
 ### `zest --uninstall`
-Complete removal: deregisters device, removes license data, **deletes model files**, and removes app bundle from Applications.
+Complete removal: deregisters device, removes license data, **deletes the model file**, and removes the app bundle from Applications.
 
 ```bash
-# Uninstall all products
 zest --uninstall
-
-# Uninstall specific product
-zest --uninstall --base
-zest --uninstall --mid
-zest --uninstall --pro
 ```
 
 **What gets removed**:
 - License data from config
 - Device registration on server
-- Model files (`~/.zest/*.gguf`)
+- Model file (`~/.zest/*.gguf`)
 - App bundle from `/Applications/`
 - Empty directories (`~/.zest/`, config dir)
 
 **What stays**:
 - CLI wrapper at `/usr/local/bin/zest` (for running cleanup commands)
-- Standalone `main.py` at `~/.zest/` (if no models remain)
+- Standalone `main.py` at `~/.zest/` (if the model is gone)
 - Shell alias in `~/.zshrc` or `~/.bashrc`
 
 **To completely remove Zest**:
@@ -159,27 +141,27 @@ rm -rf ~/Library/Application\ Support/Zest
 
 ### Key Difference: `--logout` vs `--uninstall`
 
-- **`--logout`**: "Free up a device slot but keep model files locally"
-- **`--uninstall`**: "Remove everything (license + model files + app)"
+- **`--logout`**: "Free up a device slot but keep the model file locally"
+- **`--uninstall`**: "Remove everything (license + model file + app)"
 
 ## 🧪 Testing
 
 **Prerequisites**:
 - Backend deployed
 - `API_BASE` configured in `config.py`
-- Model at `~/.zest/` (Lite: qwen2_5_coder_7b_Q5_K_M.gguf, Hot: qwen2_5_coder_7b_fp16.gguf, Extra Spicy: qwen2_5_coder_14b_Q5_K_M.gguf)
+- Model at `~/.zest/qwen3.5_9b_Q5_K_M.gguf`
 - Dependencies installed
 
 ### Test 1: First-Time Activation
 
 ```bash
 # Clear existing license
-rm -f "$HOME/Library/Application Support/Zest/license.json"
+rm -f "$HOME/Library/Application Support/Zest/config.json"
 
 # Create test license
-cd test
+cd ../functions
 python create_test_license.py your-email@example.com
-cd ..
+cd ../zest_cli
 
 # Run CLI
 python main.py "list files"
@@ -189,7 +171,7 @@ python main.py "list files"
 
 **Verify**:
 ```bash
-cat "$HOME/Library/Application Support/Zest/license.json"
+cat "$HOME/Library/Application Support/Zest/config.json"
 firebase firestore:get licenses/your-email@example.com
 ```
 
@@ -214,25 +196,25 @@ python main.py --logout
 | Setting | Location | Default |
 |---------|----------|---------|
 | API Endpoint | `config.py` | `europe-west1-<ZEST_PROJECT_ID>.cloudfunctions.net` |
-| Model Paths | `config.py` | `~/.zest/*.gguf` |
+| Model Path | `config.py` | `~/.zest/qwen3.5_9b_Q5_K_M.gguf` |
 | Lease Duration | `config.py` | 14 days |
-| Device Limit | `../functions/main.py` | 2 devices |
-| OTP Expiry | `../functions/main.py` | 10 minutes |
+| Device Limit | `../functions/config.py` | 2 devices |
+| OTP Expiry | `../functions/config.py` | 10 minutes |
 
 ## 🐛 Troubleshooting
 
 ### Authentication Issues
 
 **Authentication doesn't trigger**
-- Valid 14-day lease cached: `cat "$HOME/Library/Application Support/Zest/license.json"`
-- Clear: `rm -f "$HOME/Library/Application Support/Zest/license.json"`
+- Valid 14-day lease cached: `cat "$HOME/Library/Application Support/Zest/config.json"`
+- Clear: `rm -f "$HOME/Library/Application Support/Zest/config.json"`
 
 **"No license found"**
 - Verify Polar webhook is working
 - Check Firestore: `firebase firestore:get licenses/your-email@example.com`
 
 **Network error**
-- Check `API_BASE` in `main.py`
+- Check `API_BASE` in `config.py`
 - Verify functions deployed: `firebase deploy --only functions`
 - Test endpoint: `curl https://europe-west1-<ZEST_PROJECT_ID>.cloudfunctions.net/send_otp`
 
@@ -247,10 +229,7 @@ python main.py --logout
   - `python main.py "show disk usage"` → `df -h`
 
 **Model not found**
-- Download to `~/.zest/` with one of:
-  - Lite: `qwen2_5_coder_7b_Q5_K_M.gguf`
-  - Hot: `qwen2_5_coder_7b_fp16.gguf`
-  - Extra Spicy: `qwen2_5_coder_14b_Q5_K_M.gguf`
+- Download to `~/.zest/qwen3.5_9b_Q5_K_M.gguf`
 
 ### Testing Issues
 
@@ -261,30 +240,26 @@ python main.py --logout
 
 ### Testing (Unsigned)
 ```bash
-./build.sh
-./create_installer.sh
-sudo installer -pkg ./dist/Zest-1.0.0.pkg -target /
+./scripts/build_dmg.sh
 ```
 
 ### Production (Signed & Notarized)
 1. Get Apple Developer account ($99/year)
 2. Create Developer ID certificates
-3. Sign with `codesign` and `productsign`
-4. Notarize with `xcrun notarytool`
-5. Staple with `xcrun stapler`
-
-See `SIGNING_GUIDE.md` for details.
+3. Set `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` before running `build_dmg.sh`
+4. Notarizing and stapling happen automatically when those are set
 
 ## 📊 Firestore Schema
 
 ```
 licenses/{email}
-  ├─ base_is_paid: boolean
-  ├─ base_devices: array[{uuid, nickname, registered_at}]
-  ├─ mid_is_paid: boolean
-  ├─ mid_devices: array[{uuid, nickname, registered_at}]
-  ├─ pro_is_paid: boolean
-  ├─ pro_devices: array[{uuid, nickname, registered_at}]
+  ├─ is_paid: boolean
+  ├─ devices: array[{uuid, nickname, registered_at}]
+  ├─ is_trial: boolean
+  ├─ trial_started_at: timestamp
+  ├─ trial_expires_at: timestamp
+  ├─ trial_devices: array[{uuid, nickname, registered_at}]
+  ├─ polar_order_id: string
   ├─ otp_code: string (temporary)
   ├─ otp_expiry: datetime (temporary)
   └─ created_at: timestamp
@@ -292,4 +267,4 @@ licenses/{email}
 
 ## 📄 License
 
-Copyright © 2025 Spicy Lemonade. All rights reserved.
+Copyright © 2026 Spicy Lemonade. All rights reserved.

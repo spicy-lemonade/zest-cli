@@ -13,15 +13,16 @@ from firebase_admin import firestore
 import resend
 
 from config import (
-    MAX_DEVICES_PER_PRODUCT,
+    MAX_DEVICES,
     OTP_EXPIRY_MINUTES,
-    VALID_PRODUCTS,
     SERVICE_ACCOUNT_EMAIL,
 )
 from helpers import (
-    get_product_fields,
-    get_trial_fields,
-    get_trial_devices_field,
+    PAID_FIELD,
+    DEVICES_FIELD,
+    TRIAL_STARTED_FIELD,
+    TRIAL_EXPIRES_FIELD,
+    TRIAL_DEVICES_FIELD,
     check_machine_trial_used,
     check_otp_send_rate,
     check_otp_verify_attempt,
@@ -43,7 +44,6 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
     Generate a 6-digit OTP and send it to the user's email via Resend.
     Expects JSON: {
         "email": "user@example.com",
-        "product": "lite", "hot", or "extra_spicy",
         "flow_type": "activation" or "trial" (optional, defaults to "activation"),
         "device_id": "HARDWARE-UUID" (required for trial flow)
     }
@@ -58,21 +58,14 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Invalid JSON", status=400)
 
     email = data.get("email")
-    product = data.get("product", "lite")
     flow_type = data.get("flow_type", "activation")
     device_id = data.get("device_id")
 
     if not email:
         return https_fn.Response("Missing email", status=400)
 
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
     if flow_type not in ["activation", "trial"]:
         return https_fn.Response("Invalid flow_type. Must be 'activation' or 'trial'", status=400)
-
-    paid_field, _, _ = get_product_fields(product)
-    _, started_field, expires_field = get_trial_fields(product)
 
     db = firestore.client()
 
@@ -85,11 +78,11 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
         if not doc.exists:
             return https_fn.Response("No license found for this email", status=404)
         license_data = doc.to_dict()
-        if not license_data.get(paid_field):
-            return https_fn.Response(f"No {product} license found for this email", status=403)
+        if not license_data.get(PAID_FIELD):
+            return https_fn.Response("No license found for this email", status=403)
     else:
         if device_id:
-            machine_check = check_machine_trial_used(db, device_id, product)
+            machine_check = check_machine_trial_used(db, device_id)
             if machine_check["used"]:
                 if machine_check["expired"]:
                     return https_fn.Response(
@@ -108,12 +101,11 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
 
                     if trial_license_doc.exists:
                         trial_license_data = trial_license_doc.to_dict()
-                        trial_devices_field = get_trial_devices_field(product)
-                        trial_devices = trial_license_data.get(trial_devices_field, [])
+                        trial_devices = trial_license_data.get(TRIAL_DEVICES_FIELD, [])
                         existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
 
                         if existing_device:
-                            expires_at = trial_license_data.get(expires_field)
+                            expires_at = trial_license_data.get(TRIAL_EXPIRES_FIELD)
                             now = datetime.now(timezone.utc)
                             if isinstance(expires_at, str):
                                 expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -150,14 +142,14 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
 
         if doc.exists:
             license_data = doc.to_dict()
-            if license_data.get(paid_field):
+            if license_data.get(PAID_FIELD):
                 return https_fn.Response(
                     json.dumps({"status": "already_paid", "message": "You already have a paid license. Use activation flow."}),
                     status=200,
                     content_type="application/json"
                 )
-            if license_data.get(started_field):
-                expires_at = license_data.get(expires_field)
+            if license_data.get(TRIAL_STARTED_FIELD):
+                expires_at = license_data.get(TRIAL_EXPIRES_FIELD)
                 now = datetime.now(timezone.utc)
                 if isinstance(expires_at, str):
                     expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -168,8 +160,7 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
                         content_type="application/json"
                     )
                 if device_id:
-                    trial_devices_field = get_trial_devices_field(product)
-                    trial_devices = license_data.get(trial_devices_field, [])
+                    trial_devices = license_data.get(TRIAL_DEVICES_FIELD, [])
                     existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
                     if existing_device:
                         remaining = expires_at - now
@@ -251,9 +242,9 @@ def send_otp(req: https_fn.Request) -> https_fn.Response:
 )
 def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
     """
-    Verify OTP and register the device for a specific product.
+    Verify OTP and register the device.
     Expects JSON: {"email": "...", "otp": "123456", "device_uuid": "uuid",
-                   "device_nickname": "My Mac", "product": "lite", "hot", or "extra_spicy"}
+                   "device_nickname": "My Mac"}
     """
     try:
         data = req.get_json()
@@ -264,15 +255,9 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
     otp = data.get("otp")
     device_uuid = data.get("device_uuid")
     device_nickname = data.get("device_nickname")
-    product = data.get("product", "lite")
 
     if not all([email, otp, device_uuid, device_nickname]):
         return https_fn.Response("Missing required fields", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    paid_field, devices_field, _ = get_product_fields(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -303,25 +288,25 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
 
     reset_otp_verify_attempts(db, email)
 
-    if not license_data.get(paid_field):
-        return https_fn.Response(f"No {product} license found", status=403)
+    if not license_data.get(PAID_FIELD):
+        return https_fn.Response("No license found", status=403)
 
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get(DEVICES_FIELD, [])
 
     for i, device in enumerate(devices):
         if device["uuid"] == device_uuid:
             if device.get("nickname") != device_nickname:
                 devices[i]["nickname"] = device_nickname
                 doc_ref.update({
-                    devices_field: devices,
+                    DEVICES_FIELD: devices,
                     f"device_nicknames.{device_uuid}": device_nickname,
                     "otp_code": firestore.DELETE_FIELD,
                     "otp_expiry": firestore.DELETE_FIELD
                 })
-                return https_fn.Response(f"Device nickname updated for {product}", status=200)
-            return https_fn.Response(f"Device already registered for {product}", status=200)
+                return https_fn.Response("Device nickname updated", status=200)
+            return https_fn.Response("Device already registered", status=200)
 
-    if len(devices) >= MAX_DEVICES_PER_PRODUCT:
+    if len(devices) >= MAX_DEVICES:
         device_list = [
             {"uuid": d["uuid"], "nickname": d.get("nickname", "Unknown device")}
             for d in devices
@@ -329,7 +314,7 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response(
             json.dumps({
                 "error": "device_limit_reached",
-                "message": f"Device limit reached ({len(devices)}/{MAX_DEVICES_PER_PRODUCT})",
+                "message": f"Device limit reached ({len(devices)}/{MAX_DEVICES})",
                 "devices": device_list
             }),
             status=403,
@@ -347,10 +332,10 @@ def verify_otp_and_register(req: https_fn.Request) -> https_fn.Response:
     })
 
     doc_ref.update({
-        devices_field: devices,
+        DEVICES_FIELD: devices,
         f"device_nicknames.{device_uuid}": device_nickname,
         "otp_code": firestore.DELETE_FIELD,
         "otp_expiry": firestore.DELETE_FIELD
     })
 
-    return https_fn.Response(f"Device registered for {product}", status=200)
+    return https_fn.Response("Device registered", status=200)

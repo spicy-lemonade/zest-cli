@@ -12,28 +12,12 @@ from firebase_admin import firestore
 from polar_sdk import Polar
 from standardwebhooks.webhooks import Webhook
 
-from config import POLAR_PRODUCT_IDS, SERVICE_ACCOUNT_EMAIL
-from helpers import get_product_fields
+from config import POLAR_PRODUCT_ID, SERVICE_ACCOUNT_EMAIL
+from helpers import PAID_FIELD, DEVICES_FIELD, ORDER_FIELD
 
 
-def _determine_product_type(product_id: str, product_name: str) -> str:
-    """Determine product type from Polar product ID or name."""
-    for ptype, pid in POLAR_PRODUCT_IDS.items():
-        if product_id == pid:
-            return ptype
-    if "extra" in product_name or "spicy" in product_name or "14b" in product_name:
-        return "extra_spicy"
-    if "hot" in product_name or "fp16" in product_name:
-        return "hot"
-    if "lite" in product_name or "7b" in product_name:
-        return "lite"
-    print(f"Warning: Could not determine product type for id={product_id}, name={product_name}, defaulting to lite")
-    return "lite"
-
-
-def _upsert_license(db, email: str, product_type: str, polar_data: dict) -> bool:
+def _upsert_license(db, email: str, polar_data: dict) -> bool:
     """Create or update a paid license record in Firestore. Returns True on success."""
-    paid_field, _, order_field = get_product_fields(product_type)
     license_ref = db.collection("licenses").document(email)
 
     existing_doc = license_ref.get()
@@ -50,15 +34,15 @@ def _upsert_license(db, email: str, product_type: str, polar_data: dict) -> bool
         "polar_customer_id": polar_data.get("customer_id"),
         "updated_at": now.isoformat(),
         "updated_at_unix": int(now.timestamp()),
-        paid_field: True,
-        order_field: polar_data.get("id"),
+        PAID_FIELD: True,
+        ORDER_FIELD: polar_data.get("id"),
     }
     if polar_data.get("user_id"):
         update["polar_user_id"] = polar_data["user_id"]
 
     try:
         license_ref.set(update, merge=True)
-        print(f"License created/updated for {email}, product={product_type}")
+        print(f"License created/updated for {email}")
         return True
     except Exception as e:
         print(f"Failed to create license for {email}: {str(e)}")
@@ -76,35 +60,9 @@ def _upsert_license(db, email: str, product_type: str, polar_data: dict) -> bool
 )
 def create_checkout(req: https_fn.Request) -> https_fn.Response:
     """
-    Create a Polar.sh checkout session for a product.
-    Expects JSON: {"product": "lite"}, {"product": "hot"}, or {"product": "extra_spicy"}
+    Create a Polar.sh checkout session.
     Returns: {"checkout_url": "https://..."}
     """
-    try:
-        data = req.get_json()
-    except Exception:
-        return https_fn.Response(
-            json.dumps({"error": "Invalid JSON"}),
-            status=400,
-            content_type="application/json"
-        )
-
-    product = data.get("product")
-
-    if not product:
-        return https_fn.Response(
-            json.dumps({"error": "Missing product field"}),
-            status=400,
-            content_type="application/json"
-        )
-
-    if product not in POLAR_PRODUCT_IDS:
-        return https_fn.Response(
-            json.dumps({"error": f"Invalid product. Available: {list(POLAR_PRODUCT_IDS.keys())}"}),
-            status=400,
-            content_type="application/json"
-        )
-
     polar_access_token = os.environ.get("POLAR_ACCESS_TOKEN")
     polar_success_url = os.environ.get("POLAR_SUCCESS_URL")
 
@@ -115,7 +73,7 @@ def create_checkout(req: https_fn.Request) -> https_fn.Response:
             content_type="application/json"
         )
 
-    product_id = POLAR_PRODUCT_IDS[product]
+    product_id = POLAR_PRODUCT_ID
     success_url = polar_success_url or "https://zestcli.com?checkout=success"
 
     try:
@@ -226,23 +184,18 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
             print("No customer email found in order data")
             return https_fn.Response("No customer email in order", status=400)
 
-        product = order.get("product", {})
-        product_name = product.get("name", "").lower()
-        product_id = order.get("product_id") or product.get("id", "")
-        product_type = _determine_product_type(product_id, product_name)
-
-        print(f"Creating/updating license for {customer_email}, product={product_type}")
+        print(f"Creating/updating license for {customer_email}")
         db = firestore.client()
         polar_data = {
             "id": order.get("id"),
             "customer_id": order.get("customer_id"),
             "user_id": order.get("user_id"),
         }
-        if not _upsert_license(db, customer_email, product_type, polar_data):
+        if not _upsert_license(db, customer_email, polar_data):
             return https_fn.Response("Failed to create license", status=500)
 
         return https_fn.Response(
-            f"License for {product_type} updated for {customer_email}",
+            f"License updated for {customer_email}",
             status=200
         )
 
@@ -256,22 +209,17 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
             print("No customer email found in checkout.updated data")
             return https_fn.Response("No customer email in checkout", status=400)
 
-        product = checkout.get("product", {})
-        product_name = product.get("name", "").lower()
-        product_id = checkout.get("product_id") or product.get("id", "")
-        product_type = _determine_product_type(product_id, product_name)
-
-        print(f"Creating/updating license via checkout.updated for {customer_email}, product={product_type}")
+        print(f"Creating/updating license via checkout.updated for {customer_email}")
         db = firestore.client()
         polar_data = {
             "id": checkout.get("id"),
             "customer_id": checkout.get("customer_id"),
         }
-        if not _upsert_license(db, customer_email, product_type, polar_data):
+        if not _upsert_license(db, customer_email, polar_data):
             return https_fn.Response("Failed to create license", status=500)
 
         return https_fn.Response(
-            f"License for {product_type} updated via checkout for {customer_email}",
+            f"License updated via checkout for {customer_email}",
             status=200
         )
 
@@ -295,22 +243,17 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
             print("No customer email found in order.created data")
             return https_fn.Response("No customer email in order", status=400)
 
-        product = order.get("product", {})
-        product_name = product.get("name", "").lower()
-        product_id = order.get("product_id") or product.get("id", "")
-        product_type = _determine_product_type(product_id, product_name)
-
         db = firestore.client()
         polar_data = {
             "id": order.get("id"),
             "customer_id": order.get("customer_id"),
             "user_id": order.get("user_id"),
         }
-        if not _upsert_license(db, customer_email, product_type, polar_data):
+        if not _upsert_license(db, customer_email, polar_data):
             return https_fn.Response("Failed to create license", status=500)
 
         return https_fn.Response(
-            f"License for {product_type} created via free order for {customer_email}",
+            f"License created via free order for {customer_email}",
             status=200
         )
 
@@ -324,31 +267,25 @@ def polar_webhook(req: https_fn.Request) -> https_fn.Response:
             print("No customer email found in order.refunded data")
             return https_fn.Response("No customer email in refund", status=400)
 
-        product = order.get("product", {})
-        product_name = product.get("name", "").lower()
-        product_id = order.get("product_id") or product.get("id", "")
-        product_type = _determine_product_type(product_id, product_name)
-
-        paid_field, devices_field, _ = get_product_fields(product_type)
         db = firestore.client()
         license_ref = db.collection("licenses").document(customer_email)
 
         now = datetime.now(timezone.utc)
         try:
             license_ref.set({
-                paid_field: False,
-                devices_field: [],
-                f"{product_type}_refunded_at": now.isoformat(),
+                PAID_FIELD: False,
+                DEVICES_FIELD: [],
+                "refunded_at": now.isoformat(),
                 "updated_at": now.isoformat(),
                 "updated_at_unix": int(now.timestamp()),
             }, merge=True)
-            print(f"License revoked for {customer_email}, product={product_type}")
+            print(f"License revoked for {customer_email}")
         except Exception as e:
             print(f"Failed to revoke license for {customer_email}: {str(e)}")
             return https_fn.Response("Failed to revoke license. Please try again later.", status=500)
 
         return https_fn.Response(
-            f"License for {product_type} revoked for {customer_email}",
+            f"License revoked for {customer_email}",
             status=200
         )
 
@@ -368,7 +305,7 @@ def get_checkout_url(req: https_fn.Request) -> https_fn.Response:
     """
     Generate a Polar checkout URL for trial-to-paid conversion.
     Pre-fills the user's email for seamless checkout.
-    Expects JSON: {"email": "user@example.com", "product": "lite", "hot", or "extra_spicy"}
+    Expects JSON: {"email": "user@example.com"}
     """
     try:
         data = req.get_json()
@@ -376,16 +313,9 @@ def get_checkout_url(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Invalid JSON", status=400)
 
     email = data.get("email")
-    product = data.get("product", "lite")
 
     if not email:
         return https_fn.Response("Missing email", status=400)
-
-    if product not in POLAR_PRODUCT_IDS:
-        return https_fn.Response(
-            f"Invalid product. Available: {list(POLAR_PRODUCT_IDS.keys())}",
-            status=400
-        )
 
     polar_access_token = os.environ.get("POLAR_ACCESS_TOKEN")
     polar_success_url = os.environ.get("POLAR_SUCCESS_URL")
@@ -393,7 +323,6 @@ def get_checkout_url(req: https_fn.Request) -> https_fn.Response:
     if not polar_access_token:
         return https_fn.Response("Missing Polar access token configuration", status=500)
 
-    product_id = POLAR_PRODUCT_IDS[product]
     success_url = polar_success_url or "https://zestcli.com?checkout=success"
 
     try:
@@ -401,10 +330,10 @@ def get_checkout_url(req: https_fn.Request) -> https_fn.Response:
             access_token=polar_access_token,
         ) as polar:
             checkout_params = {
-                "products": [product_id],
+                "products": [POLAR_PRODUCT_ID],
                 "success_url": success_url,
                 "customer_email": email,
-                "metadata": {"source": "trial_conversion", "product": product}
+                "metadata": {"source": "trial_conversion"}
             }
 
             result = polar.checkouts.create(request=checkout_params)

@@ -7,6 +7,15 @@ import platform
 
 from config import AFFIRMATIVE, NEGATIVE
 
+# Must match the system prompt the model was trained with exactly (see
+# data/mart/nl_cli_prompting.py in the training repo) -- no extra sentences.
+SYSTEM_PROMPT_TEMPLATE = (
+    "You are a specialized CLI assistant for {os_name}. "
+    "Provide only the exact command requested. "
+    "Do not include placeholders, brackets, or explanations. "
+    "Output must be a valid, executable command."
+)
+
 
 def get_os_type() -> str:
     """Get the operating system type for the system prompt."""
@@ -121,21 +130,18 @@ def clean_command_output(response: str) -> str:
     Clean the model output to extract only the command.
     Handles ChatML tags, markdown, placeholders, and multi-line responses.
     """
-    # Remove ChatML end tags
+    # Remove ChatML end tags (not <|end_of_text|>: that is a Llama 3 token, not Qwen)
     response = response.replace("<|im_end|>", "")
     response = response.replace("<|endoftext|>", "")
-    response = response.replace("<|end_of_text|>", "")
 
     # Remove markdown code blocks
     response = response.replace("```bash", "").replace("```sh", "").replace("```", "")
 
-    # Remove placeholder brackets
-    response = re.sub(r"\[\[\[(.*?)\]\]\]", r"\1", response)
-    response = re.sub(r"\[\[(.*?)\]\]", r"\1", response)
-    response = re.sub(r"\[-(.*?)-\]", r"\1", response)
-
-    # Normalize whitespace
-    response = " ".join(response.split())
+    # Remove placeholder brackets, but only when they wrap the entire response --
+    # otherwise this breaks valid bash tests like `[[ -f file ]] && echo ok`.
+    response = re.sub(r"^\[\[\[(.*)\]\]\]$", r"\1", response, flags=re.DOTALL)
+    response = re.sub(r"^\[\[(.*)\]\]$", r"\1", response, flags=re.DOTALL)
+    response = re.sub(r"^\[-(.*)-\]$", r"\1", response, flags=re.DOTALL)
 
     lines = [line.strip() for line in response.split("\n") if line.strip()]
 
@@ -144,16 +150,7 @@ def clean_command_output(response: str) -> str:
         has_heredoc = any(re.search(r"<<\s*\w+", line) for line in lines)
         has_pipe_continuation = any(line.endswith("|") for line in lines[:-1])
 
-        second_line_is_explanation = (
-            len(lines) > 1 and
-            (lines[1][0].isupper() or
-             any(lines[1].lower().startswith(word) for word in
-                 ["this", "the", "it", "note:", "example:", "usage:"]))
-        )
-
-        if second_line_is_explanation:
-            response = lines[0]
-        elif has_continuation or has_heredoc or has_pipe_continuation:
+        if has_continuation or has_heredoc or has_pipe_continuation:
             response = "\n".join(lines)
         else:
             response = lines[0]
@@ -177,16 +174,7 @@ def generate_command(
     if os_name is None:
         os_name = get_os_type()
 
-    system_prompt = (
-        f"You are a specialized CLI assistant for {os_name}. "
-        f"Provide only the exact command requested. "
-        f"Do not include placeholders, brackets, or explanations. "
-        f"Output must be a valid, executable command. "
-        f"Never invent commands or flags. "
-        f"Prefer built-in utilities over third-party tools."
-    )
-
-    system_part = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(os_name=os_name)
 
     history_context = ""
     if history:
@@ -200,7 +188,15 @@ def generate_command(
     if user_context:
         additional_context = f"\n\nAdditional context from user: {user_context}"
 
-    prompt = f"{system_part}<|im_start|>user\n{query}{history_context}{additional_context}<|im_end|>\n<|im_start|>assistant\n"
+    # history_context and additional_context are appended to the user message
+    # below for retries, but the model was not trained with this extra text.
+    # Thinking is disabled: the prompt ends with an empty <think> block,
+    # exactly matching the format the model was trained on.
+    prompt = (
+        f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
+        f"<|im_start|>user\n{query}{history_context}{additional_context}<|im_end|>\n"
+        f"<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    )
 
     temp = min(base_temp + (temp_increment * 0.15), 0.8)
 

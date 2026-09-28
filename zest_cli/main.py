@@ -33,9 +33,9 @@ from datetime import datetime, timezone
 # Suppress charset_normalizer warning from requests in PyInstaller bundle
 warnings.filterwarnings("ignore", message="Unable to find acceptable character detection dependency")
 
-from config import VERSION, PRODUCTS, load_config, save_config
+from config import VERSION, load_config, save_config
 from model import (
-    get_active_product,
+    is_installed,
     check_for_orphaned_installation,
     check_for_updates,
     ensure_model_downloaded,
@@ -53,7 +53,7 @@ from commands import (
 )
 from auth import authenticate
 from trial import check_trial_license
-from activation import handle_logout, handle_uninstall, handle_model_switch
+from activation import handle_logout, handle_uninstall
 
 
 def _print_help():
@@ -62,28 +62,14 @@ def _print_help():
     print("")
     print("Usage: zest \"your query\"")
     print("")
-    print("Model Management:")
-    print("  --model --lite         Switch to Lite model")
-    print("  --model --hot          Switch to Hot model")
-    print("  --model --extra-spicy  Switch to Extra Spicy model")
-    print("")
     print("Account Management:")
     print("  --logout               Log out current device (keeps model files)")
-    print("  --logout --lite        Log out from Lite only")
-    print("  --logout --hot         Log out from Hot only")
-    print("  --logout --extra-spicy Log out from Extra Spicy only")
     print("  --logout --remote      Log out ANY device remotely (requires OTP)")
     print("")
     print("  --uninstall            Full uninstall (deletes model + license + app)")
-    print("  --uninstall --lite     Uninstall Lite only")
-    print("  --uninstall --hot      Uninstall Hot only")
-    print("  --uninstall --extra-spicy  Uninstall Extra Spicy only")
     print("")
     print("Updates:")
     print("  --update               Check for and download updates")
-    print("  --update --lite        Check for Lite updates")
-    print("  --update --hot         Check for Hot updates")
-    print("  --update --extra-spicy Check for Extra Spicy updates")
     print("")
     print("Info:")
     print("  --status        Show current model and license status")
@@ -93,30 +79,19 @@ def _print_help():
 def _print_status():
     """Print current status information."""
     config = load_config()
-    active = get_active_product()
+    installed = "✅" if is_installed() else "❌"
+    license_data = config.get("license")
+    trial_data = config.get("trial")
+    model_ver = get_model_version()
+
+    license_status = _get_license_status(license_data, trial_data)
+
     print(f"🍋 Zest Status (CLI v{VERSION})")
-    if active:
-        print(f"   Active model: {PRODUCTS[active]['name']}")
-    else:
-        print(f"   Active model: None (no models installed)")
-    print("")
+    print(f"   Installed: {installed} | {license_status} | Model v{model_ver}")
 
-    for p, info in PRODUCTS.items():
-        installed = "✅" if os.path.exists(info["path"]) else "❌"
-        license_key = f"{p}_license"
-        trial_key = f"{p}_trial"
-        trial_data = config.get(trial_key)
-        license_data = config.get(license_key)
-        model_ver = get_model_version(p)
-
-        license_status = _get_license_status(license_data, trial_data)
-
-        print(f"   {info['name']}:")
-        print(f"      Installed: {installed} | {license_status} | Model v{model_ver}")
-
-        if trial_data and trial_data.get("is_trial"):
-            email = trial_data.get("email", "")
-            print(f"      Email: {email}")
+    if trial_data and trial_data.get("is_trial"):
+        email = trial_data.get("email", "")
+        print(f"   Email: {email}")
 
     print("")
     print("   Purchase: https://zestcli.com")
@@ -157,12 +132,11 @@ def _handle_admin_flags(args: list[str]) -> bool:
         return True
 
     if "--update" in args:
-        product = _get_product_from_args(args)
         config = load_config()
         config["last_update_check"] = 0
         save_config(config)
-        print(f"🍋 Checking for updates ({PRODUCTS[product]['name']})...")
-        check_for_updates(product)
+        print(f"🍋 Checking for updates...")
+        check_for_updates()
         print("✅ Update check complete.")
         return True
 
@@ -170,74 +144,29 @@ def _handle_admin_flags(args: list[str]) -> bool:
         _print_status()
         return True
 
-    if "--model" in args:
-        if "--lite" in args:
-            handle_model_switch("lite")
-        elif "--hot" in args:
-            handle_model_switch("hot")
-        elif "--extra-spicy" in args:
-            handle_model_switch("extra_spicy")
-        else:
-            print("❌ Specify model: --model --lite, --model --hot, or --model --extra-spicy")
-        return True
-
     if "--logout" in args:
-        product = None
         remote = "--remote" in args
-        if "--lite" in args:
-            product = "lite"
-        elif "--hot" in args:
-            product = "hot"
-        elif "--extra-spicy" in args:
-            product = "extra_spicy"
-        handle_logout(product, remote=remote)
+        handle_logout(remote=remote)
         return True
 
     if "--uninstall" in args:
-        product = None
-        if "--lite" in args:
-            product = "lite"
-        elif "--hot" in args:
-            product = "hot"
-        elif "--extra-spicy" in args:
-            product = "extra_spicy"
-        handle_uninstall(product)
+        handle_uninstall()
         return True
 
     # Suggest correct command if user forgets the dashes
-    # Only suggest if it matches the exact pattern of admin commands
-    valid_logout_flags = {"--lite", "--hot", "--extra-spicy", "--remote"}
-    valid_uninstall_flags = {"--lite", "--hot", "--extra-spicy"}
-
     if args and args[0] == "logout" and "--logout" not in args:
-        # Check if all remaining args are valid flags for logout
         remaining_args = set(args[1:])
-        if remaining_args.issubset(valid_logout_flags):
+        if remaining_args.issubset({"--remote"}):
             print("💡 Did you mean 'zest --logout'?")
             print("   Run 'zest --help' for usage information.")
             return True
 
     if args and args[0] == "uninstall" and "--uninstall" not in args:
-        # Check if all remaining args are valid flags for uninstall
-        remaining_args = set(args[1:])
-        if remaining_args.issubset(valid_uninstall_flags):
-            print("💡 Did you mean 'zest --uninstall'?")
-            print("   Run 'zest --help' for usage information.")
-            return True
+        print("💡 Did you mean 'zest --uninstall'?")
+        print("   Run 'zest --help' for usage information.")
+        return True
 
     return False
-
-
-def _get_product_from_args(args: list[str]) -> str:
-    """Get product from args or use active product."""
-    if "--lite" in args:
-        return "lite"
-    elif "--hot" in args:
-        return "hot"
-    elif "--extra-spicy" in args:
-        return "extra_spicy"
-    else:
-        return get_active_product()
 
 
 def _check_query_quality_and_confirm(query: str) -> bool:
@@ -465,14 +394,12 @@ def main():
 
     query = " ".join(sys.argv[1:])
 
-    # 3. Determine active product
-    active_product = get_active_product()
-
-    if active_product is None:
-        print("❌ No Zest models are installed.")
+    # 3. Check that Zest is installed
+    if not is_installed():
+        print("❌ Zest is not installed.")
         print("")
         print("To install Zest:")
-        print("  1. Download Zest-Lite.dmg, Zest-Hot.dmg, or Zest-Extra-Spicy.dmg")
+        print("  1. Download Zest.dmg")
         print("  2. Drag the app to Applications")
         print("  3. Run 'zest' from Terminal")
         print("")
@@ -480,7 +407,7 @@ def main():
         sys.exit(1)
 
     # 4. Check for orphaned installations
-    if check_for_orphaned_installation(active_product):
+    if check_for_orphaned_installation():
         sys.exit(0)
 
     # 5. Query quality checks
@@ -488,17 +415,17 @@ def main():
         sys.exit(1)
 
     # 6. Authenticate
-    if not check_trial_license(active_product):
-        authenticate(active_product)
+    if not check_trial_license():
+        authenticate()
 
     # 7. Ensure model is downloaded (first-run or post-trial-expiry re-download)
-    ensure_model_downloaded(active_product)
+    ensure_model_downloaded()
 
     # 8. Check for updates (silent, non-blocking)
-    check_for_updates(active_product)
+    check_for_updates()
 
     # 9. Load model
-    llm = load_model(active_product)
+    llm = load_model()
 
     # 10. Run command loop
     _run_command_loop(llm, query)

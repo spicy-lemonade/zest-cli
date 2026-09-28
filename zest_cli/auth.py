@@ -9,7 +9,7 @@ import time
 import requests
 
 from config import (
-    API_BASE, PRODUCTS, LEASE_DURATION,
+    API_BASE, PRODUCT_NAME, LEASE_DURATION,
     load_config, save_config, format_connection_error
 )
 from trial import (
@@ -21,33 +21,30 @@ from trial import (
 from activation import activate_paid_license
 
 
-def authenticate(product: str) -> bool:
+def authenticate() -> bool:
     """
-    The Gatekeeper: Checks local 14-day lease or starts OTP flow for a product.
+    The Gatekeeper: Checks local 14-day lease or starts OTP flow.
     Returns True if authenticated, exits on failure.
     """
     hw_id = get_hw_id()
     config = load_config()
-    product_key = f"{product}_license"
-    product_name = PRODUCTS[product]["name"]
 
     # 1. Check for local paid license lease
-    license_data = config.get(product_key, {})
+    license_data = config.get("license", {})
     if license_data:
-        result = _check_paid_license(license_data, hw_id, product, config, product_key)
+        result = _check_paid_license(license_data, hw_id, config)
         if result is not None:
             return result
 
     # 2. Check for active trial
-    if check_trial_license(product):
+    if check_trial_license():
         return True
 
     # 3. Welcome/OTP Flow (For new users)
-    return _handle_new_user_flow(product, product_name, config)
+    return _handle_new_user_flow(config)
 
 
-def _check_paid_license(license_data: dict, hw_id: str, product: str,
-                        config: dict, product_key: str) -> bool | None:
+def _check_paid_license(license_data: dict, hw_id: str, config: dict) -> bool | None:
     """Check if paid license is valid. Returns True/None on success, exits on failure."""
     email = license_data.get("email")
     last_verified = license_data.get("last_verified", 0)
@@ -62,20 +59,20 @@ def _check_paid_license(license_data: dict, hw_id: str, product: str,
     try:
         res = requests.post(
             f"{API_BASE}/license_heartbeat",
-            json={"email": email, "device_uuid": hw_id, "product": product},
+            json={"email": email, "device_uuid": hw_id},
             timeout=4
         )
         if res.status_code == 200:
             license_data["last_verified"] = current_time
-            config[product_key] = license_data
+            config["license"] = license_data
             save_config(config)
             print("\033[2K\r", end="")
             return True
         elif res.status_code == 403:
-            _handle_heartbeat_403(res.text, product, config, product_key)
+            _handle_heartbeat_403(res.text, config)
         elif res.status_code == 404:
             print("\n❌ License not found. Please re-purchase or contact support.")
-            del config[product_key]
+            del config["license"]
             save_config(config)
             sys.exit(1)
     except requests.exceptions.RequestException:
@@ -85,47 +82,47 @@ def _check_paid_license(license_data: dict, hw_id: str, product: str,
     return None
 
 
-def _handle_heartbeat_403(error_text: str, product: str, config: dict, product_key: str):
+def _handle_heartbeat_403(error_text: str, config: dict):
     """Handle 403 error from license heartbeat."""
     if "Device limit" in error_text or "not registered" in error_text:
         print(f"\n❌ {error_text}")
-        print(f"   Run 'zest --uninstall --{product}' on another device to free a slot.")
+        print(f"   Run 'zest --uninstall' on another device to free a slot.")
     else:
         print(f"\n❌ License issue: {error_text}")
-    del config[product_key]
+    del config["license"]
     save_config(config)
     sys.exit(1)
 
 
-def _handle_new_user_flow(product: str, product_name: str, config: dict) -> bool:
+def _handle_new_user_flow(config: dict) -> bool:
     """Handle flow for new users without existing license or trial."""
     # Check for pending checkout first (user may have just paid)
-    pending_result = check_pending_checkout_and_activate(product)
+    pending_result = check_pending_checkout_and_activate()
     if pending_result is True:
         return True
     if pending_result == "start_trial":
-        if start_trial_flow(product):
+        if start_trial_flow():
             return True
         print("\n🍋 Switching to paid account activation...")
-        return _activate_paid_account(product, product_name)
+        return _activate_paid_account()
     if pending_result == "purchase":
         config = load_config()
-        _handle_purchase_flow(product, config)
+        _handle_purchase_flow(config)
 
     # Present choice between trial, paid account, and purchase
-    _show_welcome_menu(product_name)
+    _show_welcome_menu()
 
     while True:
         choice = input("Enter choice [1/2/3/4]: ").strip()
 
         if choice == "2":
-            if start_trial_flow(product):
+            if start_trial_flow():
                 return True
             print("\n🍋 Switching to paid account activation...")
             choice = "1"
 
         if choice == "3":
-            _handle_purchase_flow(product, config)
+            _handle_purchase_flow(config)
             continue
 
         if choice == "4":
@@ -137,25 +134,25 @@ def _handle_new_user_flow(product: str, product_name: str, config: dict) -> bool
 
         print("   Please enter 1, 2, 3, or 4.")
 
-    return _activate_paid_account(product, product_name)
+    return _activate_paid_account()
 
 
-def _activate_paid_account(product: str, product_name: str) -> bool:
+def _activate_paid_account() -> bool:
     """Prompt for email and activate a paid license."""
-    print(f"\n🍋 Activation required for {product_name}.")
+    print(f"\n🍋 Activation required for {PRODUCT_NAME}.")
     email = input("Enter your purchase email: ").strip()
 
-    if activate_paid_license(product, email):
+    if activate_paid_license(email):
         return True
     else:
         sys.exit(1)
 
 
-def _show_welcome_menu(product_name: str):
+def _show_welcome_menu():
     """Display the welcome menu."""
     print("")
     print("┌─────────────────────────────────────────────────┐")
-    print(f"│  Welcome to Zest {product_name}!")
+    print(f"│  Welcome to {PRODUCT_NAME}!")
     print("│")
     print("│  [1] I already have a paid account")
     print("│  [2] Start free trial (5 days)")
@@ -165,7 +162,7 @@ def _show_welcome_menu(product_name: str):
     print("")
 
 
-def _handle_purchase_flow(product: str, config: dict):
+def _handle_purchase_flow(config: dict):
     """Handle the purchase flow - get checkout URL and open browser."""
     print("\n🍋 Purchase Zest license")
     purchase_email = input("Enter your email: ").strip()
@@ -183,7 +180,7 @@ def _handle_purchase_flow(product: str, config: dict):
     try:
         res = requests.post(
             f"{API_BASE}/get_checkout_url",
-            json={"email": purchase_email, "product": product},
+            json={"email": purchase_email},
             timeout=30
         )
         if res.status_code == 200:
@@ -197,7 +194,6 @@ def _handle_purchase_flow(product: str, config: dict):
                 # Save pending checkout state
                 config["pending_checkout"] = {
                     "email": purchase_email,
-                    "product": product,
                     "timestamp": time.time()
                 }
                 save_config(config)

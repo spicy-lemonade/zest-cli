@@ -3,43 +3,39 @@ Paid license activation, logout, and uninstall for Zest CLI.
 """
 
 import os
-import sys
 import subprocess
 import time
 import json
 import requests
 
 from config import (
-    API_BASE, PRODUCTS, ZEST_DIR,
+    API_BASE, PRODUCT_NAME, ZEST_DIR,
     load_config, save_config, format_connection_error
 )
 from trial import get_hw_id
 
 
-def activate_paid_license(product: str, email: str) -> bool:
+def activate_paid_license(email: str) -> bool:
     """
     Activate a paid license for a user. Handles OTP and device registration.
     Returns True if activation succeeded.
     """
     config = load_config()
     hw_id = get_hw_id()
-    product_key = f"{product}_license"
-    product_name = PRODUCTS[product]["name"]
-    trial_key = f"{product}_trial"
 
     # First check if license exists
     print(f"\033[2K\r🌶️ Checking license for {email}...", end="", flush=True)
     try:
         check_res = requests.post(
             f"{API_BASE}/check_trial_status",
-            json={"email": email, "product": product, "device_id": hw_id},
+            json={"email": email, "device_id": hw_id},
             timeout=10
         )
         if check_res.status_code == 200:
             data = check_res.json()
             if data.get("status") != "paid":
                 print("\033[2K\r")
-                print(f"❌ No {product_name} license found for {email}.")
+                print(f"❌ No license found for {email}.")
                 print("   Visit https://zestcli.com to purchase a license.")
                 return False
         else:
@@ -56,7 +52,7 @@ def activate_paid_license(product: str, email: str) -> bool:
     try:
         otp_res = requests.post(
             f"{API_BASE}/send_otp",
-            json={"email": email, "product": product},
+            json={"email": email},
             timeout=30
         )
         if otp_res.status_code != 200:
@@ -81,7 +77,7 @@ def activate_paid_license(product: str, email: str) -> bool:
         break
 
     # Check for existing nickname from trial data
-    nickname = _get_existing_nickname(config, trial_key, email, product, hw_id)
+    nickname = _get_existing_nickname(config, email, hw_id)
 
     if nickname:
         print(f"\n💻 Using device nickname: \"{nickname}\"")
@@ -89,13 +85,13 @@ def activate_paid_license(product: str, email: str) -> bool:
         nickname = _prompt_for_nickname()
 
     # Verify OTP and register device
-    return _register_device(email, code, hw_id, nickname, product, config, product_key, trial_key, product_name)
+    return _register_device(email, code, hw_id, nickname, config)
 
 
-def _get_existing_nickname(config: dict, trial_key: str, email: str, product: str, hw_id: str) -> str | None:
+def _get_existing_nickname(config: dict, email: str, hw_id: str) -> str | None:
     """Get existing nickname from local config or backend."""
     # Check local config first
-    trial_data = config.get(trial_key, {})
+    trial_data = config.get("trial", {})
     existing_nickname = trial_data.get("device_nickname")
 
     if existing_nickname:
@@ -105,7 +101,7 @@ def _get_existing_nickname(config: dict, trial_key: str, email: str, product: st
     try:
         trial_check = requests.post(
             f"{API_BASE}/check_trial_status",
-            json={"email": email, "product": product, "device_id": hw_id},
+            json={"email": email, "device_id": hw_id},
             timeout=15
         )
         if trial_check.status_code == 200:
@@ -129,9 +125,7 @@ def _prompt_for_nickname() -> str:
         print("   ⚠️  Nickname is required. Please enter a name for this device.")
 
 
-def _register_device(email: str, code: str, hw_id: str, nickname: str,
-                     product: str, config: dict, product_key: str,
-                     trial_key: str, product_name: str) -> bool:
+def _register_device(email: str, code: str, hw_id: str, nickname: str, config: dict) -> bool:
     """Register device with the backend."""
     verify_res = requests.post(
         f"{API_BASE}/verify_otp_and_register",
@@ -139,40 +133,37 @@ def _register_device(email: str, code: str, hw_id: str, nickname: str,
             "email": email,
             "otp": code,
             "device_uuid": hw_id,
-            "device_nickname": nickname,
-            "product": product
+            "device_nickname": nickname
         }
     )
 
     if verify_res.status_code == 200:
-        _save_license_config(config, product_key, email, nickname, trial_key)
-        print(f"✅ Success! Device \"{nickname}\" linked for {product_name}. Just a moment...")
+        _save_license_config(config, email, nickname)
+        print(f"✅ Success! Device \"{nickname}\" linked. Just a moment...")
         return True
 
     if verify_res.status_code == 403:
-        return _handle_device_limit(verify_res, email, hw_id, nickname, product,
-                                   config, product_key, trial_key)
+        return _handle_device_limit(verify_res, email, hw_id, nickname, config)
 
     print(f"❌ Activation failed: {verify_res.text}")
     return False
 
 
-def _save_license_config(config: dict, product_key: str, email: str, nickname: str, trial_key: str):
+def _save_license_config(config: dict, email: str, nickname: str):
     """Save license configuration after successful activation."""
-    config[product_key] = {
+    config["license"] = {
         "email": email,
         "last_verified": time.time(),
         "device_nickname": nickname
     }
-    if trial_key in config:
-        del config[trial_key]
+    if "trial" in config:
+        del config["trial"]
     if "pending_checkout" in config:
         del config["pending_checkout"]
     save_config(config)
 
 
-def _handle_device_limit(verify_res, email: str, hw_id: str, nickname: str,
-                         product: str, config: dict, product_key: str, trial_key: str) -> bool:
+def _handle_device_limit(verify_res, email: str, hw_id: str, nickname: str, config: dict) -> bool:
     """Handle device limit reached error by offering to replace a device."""
     try:
         error_data = verify_res.json()
@@ -194,8 +185,7 @@ def _handle_device_limit(verify_res, email: str, hw_id: str, nickname: str,
             if choice.isdigit():
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(devices):
-                    return _replace_device(devices[choice_num - 1], email, hw_id, nickname,
-                                          product, config, product_key, trial_key)
+                    return _replace_device(devices[choice_num - 1], email, hw_id, nickname, config)
                 elif choice_num == len(devices) + 1:
                     print("❌ Cancelled.")
                     return False
@@ -206,8 +196,7 @@ def _handle_device_limit(verify_res, email: str, hw_id: str, nickname: str,
         return False
 
 
-def _replace_device(old_device: dict, email: str, hw_id: str, nickname: str,
-                    product: str, config: dict, product_key: str, trial_key: str) -> bool:
+def _replace_device(old_device: dict, email: str, hw_id: str, nickname: str, config: dict) -> bool:
     """Replace an existing device with the new one."""
     print(f"\n\033[2K\r🌶️ Replacing \"{old_device['nickname']}\"...", end="", flush=True)
     replace_res = requests.post(
@@ -216,14 +205,13 @@ def _replace_device(old_device: dict, email: str, hw_id: str, nickname: str,
             "email": email,
             "old_device_uuid": old_device["uuid"],
             "new_device_uuid": hw_id,
-            "new_device_nickname": nickname,
-            "product": product
+            "new_device_nickname": nickname
         },
         timeout=10
     )
 
     if replace_res.status_code == 200:
-        _save_license_config(config, product_key, email, nickname, trial_key)
+        _save_license_config(config, email, nickname)
         print(f"\033[2K\r✅ Device \"{nickname}\" registered, replacing \"{old_device['nickname']}\".")
         return True
 
@@ -231,74 +219,54 @@ def _replace_device(old_device: dict, email: str, hw_id: str, nickname: str,
     return False
 
 
-def handle_logout(product: str | None, remote: bool = False):
+def handle_logout(remote: bool = False):
     """
-    Log out from a product - removes license but keeps model files.
+    Log out - removes license but keeps model files.
     If remote=True, allows logging out any registered device (requires OTP).
     """
     config = load_config()
     hw_id = get_hw_id()
 
-    if product:
-        products_to_logout = [product]
-    else:
-        licensed_products = [p for p in PRODUCTS.keys() if config.get(f"{p}_license")]
-        if licensed_products:
-            products_to_logout = licensed_products
-        else:
-            if not remote:
-                print("🍋 Not logged in on this device.")
-                print("   Use --logout --remote to log out a device remotely.")
-                return
-            products_to_logout = list(PRODUCTS.keys())
-
     if remote:
-        handle_remote_logout(products_to_logout[0] if len(products_to_logout) == 1 else None)
+        handle_remote_logout()
         return
 
-    any_logged_out = False
+    license_data = config.get("license")
 
-    for p in products_to_logout:
-        product_key = f"{p}_license"
-        license_data = config.get(product_key)
+    if not license_data:
+        print("🍋 Not logged in on this device.")
+        print("   Use --logout --remote to log out a device remotely.")
+        return
 
-        if not license_data:
-            if product:
-                print(f"🍋 Not logged in for {PRODUCTS[p]['name']}.")
-            continue
+    email = license_data.get("email")
+    nickname = license_data.get("device_nickname", "this device")
+    if email:
+        _deregister_device_from_server(email, hw_id, nickname)
 
-        email = license_data.get("email")
-        nickname = license_data.get("device_nickname", "this device")
-        if email:
-            _deregister_device_from_server(email, hw_id, p, nickname)
-
-        del config[product_key]
-        any_logged_out = True
-
+    del config["license"]
     save_config(config)
-    if any_logged_out:
-        print("🍋 Logout complete. Model files kept on disk.")
-        print("   Use --uninstall to also remove model files.")
+    print("🍋 Logout complete. Model files kept on disk.")
+    print("   Use --uninstall to also remove model files.")
 
 
-def _deregister_device_from_server(email: str, hw_id: str, product: str, nickname: str):
+def _deregister_device_from_server(email: str, hw_id: str, nickname: str):
     """Deregister a device from the server."""
-    print(f"\033[2K\r🌶️ Deregistering \"{nickname}\" from {PRODUCTS[product]['name']}...", end="", flush=True)
+    print(f"\033[2K\r🌶️ Deregistering \"{nickname}\"...", end="", flush=True)
     try:
         res = requests.post(
             f"{API_BASE}/deregister_device",
-            json={"email": email, "device_uuid": hw_id, "product": product},
+            json={"email": email, "device_uuid": hw_id},
             timeout=10
         )
         if res.status_code == 200:
-            print(f"\033[2K\r🍋 \"{nickname}\" deregistered from {PRODUCTS[product]['name']} license.")
+            print(f"\033[2K\r🍋 \"{nickname}\" deregistered from your license.")
         else:
             print(f"\033[2K\r⚠️  Could not deregister: {res.text}")
     except requests.exceptions.RequestException:
         print(f"\033[2K\r⚠️  Could not reach server. Device may still be registered.")
 
 
-def handle_remote_logout(product: str | None):
+def handle_remote_logout():
     """Remote logout: deregister any device (not just the current one)."""
     print("🍋 Remote Device Logout")
     print("   This lets you deregister any device from your license.")
@@ -309,19 +277,12 @@ def handle_remote_logout(product: str | None):
         print("❌ Email is required.")
         return
 
-    if product is None:
-        product = _prompt_for_product()
-        if not product:
-            return
-
-    product_name = PRODUCTS[product]["name"]
-
     # Send OTP
     print(f"\n\033[2K\r🌶️ Sending verification code to {email}...", end="", flush=True)
     try:
         otp_res = requests.post(
             f"{API_BASE}/send_otp",
-            json={"email": email, "product": product},
+            json={"email": email},
             timeout=30
         )
         if otp_res.status_code != 200:
@@ -345,43 +306,24 @@ def handle_remote_logout(product: str | None):
             continue
         break
 
-    devices = _fetch_device_list(email, code, product)
+    devices = _fetch_device_list(email, code)
     if devices is None:
         return
 
     if not devices:
-        print(f"🍋 No devices registered for {product_name}.")
+        print(f"🍋 No devices registered for {PRODUCT_NAME}.")
         return
 
-    _display_and_deregister_device(devices, product, product_name, email)
+    _display_and_deregister_device(devices, email)
 
 
-def _prompt_for_product() -> str | None:
-    """Prompt user to select a product."""
-    print("")
-    print("Which product license?")
-    print("   1. Lite")
-    print("   2. Hot")
-    print("   3. Extra Spicy")
-    choice = input("Enter choice [1/2/3]: ").strip()
-    if choice == "1":
-        return "lite"
-    elif choice == "2":
-        return "hot"
-    elif choice == "3":
-        return "extra_spicy"
-    else:
-        print("❌ Invalid choice.")
-        return None
-
-
-def _fetch_device_list(email: str, code: str, product: str) -> list | None:
+def _fetch_device_list(email: str, code: str) -> list | None:
     """Fetch list of registered devices from server."""
     print(f"\n\033[2K\r🌶️ Fetching registered devices...", end="", flush=True)
     try:
         list_res = requests.post(
             f"{API_BASE}/list_devices",
-            json={"email": email, "otp": code, "product": product},
+            json={"email": email, "otp": code},
             timeout=10
         )
         if list_res.status_code != 200:
@@ -399,9 +341,9 @@ def _fetch_device_list(email: str, code: str, product: str) -> list | None:
         return None
 
 
-def _display_and_deregister_device(devices: list, product: str, product_name: str, email: str):
+def _display_and_deregister_device(devices: list, email: str):
     """Display device list and let user select one to deregister."""
-    print(f"📱 Registered devices for {product_name}:")
+    print(f"📱 Registered devices for {PRODUCT_NAME}:")
     print("")
     hw_id = get_hw_id()
     for i, device in enumerate(devices, 1):
@@ -422,27 +364,26 @@ def _display_and_deregister_device(devices: list, product: str, product_name: st
         print(f"   Please enter a number between 1 and {len(devices) + 1}.")
 
     selected_device = devices[choice_num - 1]
-    _deregister_selected_device(selected_device, email, product, product_name, hw_id)
+    _deregister_selected_device(selected_device, email, hw_id)
 
 
-def _deregister_selected_device(device: dict, email: str, product: str, product_name: str, hw_id: str):
+def _deregister_selected_device(device: dict, email: str, hw_id: str):
     """Deregister the selected device."""
     print(f"\n\033[2K\r🌶️ Deregistering \"{device['nickname']}\"...", end="", flush=True)
     try:
         dereg_res = requests.post(
             f"{API_BASE}/deregister_device",
-            json={"email": email, "device_uuid": device["uuid"], "product": product},
+            json={"email": email, "device_uuid": device["uuid"]},
             timeout=10
         )
         if dereg_res.status_code == 200:
-            print(f"\033[2K\r🍋 \"{device['nickname']}\" deregistered from {product_name}.")
+            print(f"\033[2K\r🍋 \"{device['nickname']}\" deregistered.")
 
             # Clear local config if we deregistered current device
             if device["uuid"] == hw_id:
                 config = load_config()
-                product_key = f"{product}_license"
-                if product_key in config:
-                    del config[product_key]
+                if "license" in config:
+                    del config["license"]
                     save_config(config)
                     print("   Local license data cleared.")
         else:
@@ -451,43 +392,17 @@ def _deregister_selected_device(device: dict, email: str, product: str, product_
         print(f"\033[2K\r⚠️  Could not reach server.")
 
 
-def handle_uninstall(product: str | None):
+def handle_uninstall():
     """
-    Uninstall a product - delegates to cleanup.sh for actual cleanup work.
+    Uninstall Zest - delegates to cleanup.sh for actual cleanup work.
     """
     cleanup_script = os.path.join(ZEST_DIR, "cleanup.sh")
 
-    cmd = [cleanup_script, "--uninstall"]
-    if product == "lite":
-        cmd.append("--lite")
-    elif product == "hot":
-        cmd.append("--hot")
-    elif product == "extra_spicy":
-        cmd.append("--extra-spicy")
-
     if os.path.exists(cleanup_script):
         try:
-            subprocess.run(cmd, check=False)
+            subprocess.run([cleanup_script, "--uninstall"], check=False)
         except (subprocess.SubprocessError, OSError) as e:
             print(f"⚠️  Cleanup script error: {e}")
     else:
         print("❌ Cleanup script not found.")
         print("   Please reinstall Zest from the DMG to restore cleanup functionality.")
-
-
-def handle_model_switch(product: str):
-    """Switch active model preference."""
-    if product not in PRODUCTS:
-        print(f"❌ Invalid product. Use: --lite, --hot, or --extra-spicy")
-        sys.exit(1)
-
-    model_path = PRODUCTS[product]["path"]
-    if not os.path.exists(model_path):
-        print(f"❌ {PRODUCTS[product]['name']} model not installed.")
-        print(f"   Expected at: {model_path}")
-        sys.exit(1)
-
-    config = load_config()
-    config["active_product"] = product
-    save_config(config)
-    print(f"✅ Switched to {PRODUCTS[product]['name']} model.")

@@ -2,7 +2,7 @@
 
 # Zest DMG Build Script
 # Creates a distributable DMG containing the Zest CLI and model
-# Usage: ./build_dmg.sh [lite|hot|extra_spicy]
+# Usage: ./build_dmg.sh
 
 set -e
 
@@ -15,6 +15,7 @@ DIST_DIR="$PROJECT_DIR/dist"
 VERSION="1.0.0"
 APP_NAME="Zest"
 BUNDLE_ID="com.zestcli.zest"
+MODEL_NAME="qwen3.5_9b_Q5_K_M.gguf"
 
 # Verify version matches config.py
 CONFIG_PY_VERSION=$(grep -m1 'VERSION = "' "$PROJECT_DIR/config.py" | sed 's/.*VERSION = "\([^"]*\)".*/\1/')
@@ -26,40 +27,15 @@ if [ "$VERSION" != "$CONFIG_PY_VERSION" ]; then
     exit 1
 fi
 
-# Product configuration
-PRODUCT="${1:-lite}"
-case "$PRODUCT" in
-    lite)
-        MODEL_NAME="qwen2_5_coder_7b_Q5_K_M.gguf"
-        PRODUCT_SUFFIX="-Lite"
-        ;;
-    hot)
-        MODEL_NAME="qwen2_5_coder_7b_fp16.gguf"
-        PRODUCT_SUFFIX="-Hot"
-        ;;
-    extra_spicy|extra-spicy)
-        PRODUCT="extra_spicy"
-        MODEL_NAME="qwen2_5_coder_14b_Q5_K_M.gguf"
-        PRODUCT_SUFFIX="-Extra-Spicy"
-        ;;
-    *)
-        echo "Usage: $0 [lite|hot|extra_spicy]"
-        echo "  lite        - Build Lite DMG (~50MB, model downloaded on first run)"
-        echo "  hot         - Build Hot DMG (~50MB, model downloaded on first run)"
-        echo "  extra_spicy - Build Extra Spicy DMG (~50MB, model downloaded on first run)"
-        exit 1
-        ;;
-esac
-
 echo "🍋 Zest DMG Build Script v$VERSION"
 echo "=================================="
-echo "Building: $APP_NAME$PRODUCT_SUFFIX"
+echo "Building: $APP_NAME"
 echo "Model: $MODEL_NAME"
 echo ""
 
-# Clean previous builds for this product
+# Clean previous builds
 echo "🧹 Cleaning previous builds..."
-rm -rf "$BUILD_DIR" "$DIST_DIR/${APP_NAME}${PRODUCT_SUFFIX}"*
+rm -rf "$BUILD_DIR" "$DIST_DIR/${APP_NAME}"*
 mkdir -p "$BUILD_DIR" "$DIST_DIR"
 
 # Check for required tools
@@ -100,7 +76,7 @@ pyinstaller \
 
 # Create app bundle structure
 echo "📁 Creating app bundle..."
-APP_BUNDLE="$DIST_DIR/${APP_NAME}${PRODUCT_SUFFIX}.app"
+APP_BUNDLE="$DIST_DIR/${APP_NAME}.app"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
@@ -132,12 +108,8 @@ if [ -f "$PROJECT_DIR/resources/icon.icns" ]; then
     cp "$PROJECT_DIR/resources/icon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
 
-# Copy product-specific license
-PRODUCT_UPPER=$(echo "$PRODUCT" | tr '[:lower:]' '[:upper:]')
-LICENSE_FILE="$PROJECT_DIR/resources/MODEL_LICENSE_${PRODUCT_UPPER}.txt"
-if [ -f "$LICENSE_FILE" ]; then
-    cp "$LICENSE_FILE" "$APP_BUNDLE/Contents/Resources/MODEL_LICENSE.txt"
-elif [ -f "$PROJECT_DIR/resources/MODEL_LICENSE.txt" ]; then
+# Copy model license
+if [ -f "$PROJECT_DIR/resources/MODEL_LICENSE.txt" ]; then
     cp "$PROJECT_DIR/resources/MODEL_LICENSE.txt" "$APP_BUNDLE/Contents/Resources/"
 fi
 
@@ -150,11 +122,11 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << EOF
     <key>CFBundleExecutable</key>
     <string>zest-launcher</string>
     <key>CFBundleIdentifier</key>
-    <string>${BUNDLE_ID}.${PRODUCT}</string>
+    <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
-    <string>${APP_NAME}${PRODUCT_SUFFIX}</string>
+    <string>${APP_NAME}</string>
     <key>CFBundleDisplayName</key>
-    <string>${APP_NAME} ${PRODUCT_SUFFIX}</string>
+    <string>${APP_NAME} CLI</string>
     <key>CFBundleVersion</key>
     <string>$VERSION</string>
     <key>CFBundleShortVersionString</key>
@@ -171,8 +143,6 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << EOF
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
-    <key>ZestProduct</key>
-    <string>$PRODUCT</string>
 </dict>
 </plist>
 EOF
@@ -192,22 +162,6 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 RESOURCES_DIR="$(dirname "$SCRIPT_DIR")/Resources"
 
-# Detect product type from app bundle name
-APP_NAME="$(basename "$(dirname "$(dirname "$SCRIPT_DIR")")")"
-if [[ "$APP_NAME" == *"Extra-Spicy"* ]]; then
-    MODEL_NAME="qwen2_5_coder_14b_Q5_K_M.gguf"
-    PRODUCT_NAME="Extra Spicy"
-    PRODUCT_LOWER="extra_spicy"
-elif [[ "$APP_NAME" == *"Hot"* ]]; then
-    MODEL_NAME="qwen2_5_coder_7b_fp16.gguf"
-    PRODUCT_NAME="Hot"
-    PRODUCT_LOWER="hot"
-else
-    MODEL_NAME="qwen2_5_coder_7b_Q5_K_M.gguf"
-    PRODUCT_NAME="Lite"
-    PRODUCT_LOWER="lite"
-fi
-
 # Check if launched from Finder (will show dialog AFTER first-run setup)
 LAUNCHED_FROM_FINDER=false
 if [ $# -eq 0 ]; then
@@ -218,8 +172,8 @@ if [ $# -eq 0 ]; then
 fi
 
 # First-run setup
-SETUP_MARKER="$HOME/.zest/.${PRODUCT_LOWER}_setup_complete"
-UNINSTALL_MARKER="$HOME/.zest/.${PRODUCT_LOWER}_uninstalled"
+SETUP_MARKER="$HOME/.zest/.setup_complete"
+UNINSTALL_MARKER="$HOME/.zest/.uninstalled"
 if [ ! -f "$SETUP_MARKER" ]; then
     mkdir -p "$HOME/.zest"
 
@@ -250,36 +204,10 @@ if [ ! -f "$SETUP_MARKER" ]; then
 #!/bin/bash
 # Zest CLI Wrapper - Survives app deletion for cleanup
 
-LITE_APP="/Applications/Zest-Lite.app"
-HOT_APP="/Applications/Zest-Hot.app"
-EXTRA_SPICY_APP="/Applications/Zest-Extra-Spicy.app"
+APP_PATH="/Applications/Zest.app"
 
-# Find which app to use (prefer extra_spicy > hot > lite)
-CONFIG_FILE="$HOME/Library/Application Support/Zest/config.json"
-APP_PATH=""
-
-if [ -f "$CONFIG_FILE" ]; then
-    ACTIVE=$(grep -o '"active_product": *"[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4)
-    case "$ACTIVE" in
-        extra_spicy) [ -d "$EXTRA_SPICY_APP" ] && APP_PATH="$EXTRA_SPICY_APP" ;;
-        hot) [ -d "$HOT_APP" ] && APP_PATH="$HOT_APP" ;;
-        lite) [ -d "$LITE_APP" ] && APP_PATH="$LITE_APP" ;;
-    esac
-fi
-
-# Fallback to any available app (extra_spicy > hot > lite)
-if [ -z "$APP_PATH" ]; then
-    if [ -d "$EXTRA_SPICY_APP" ]; then
-        APP_PATH="$EXTRA_SPICY_APP"
-    elif [ -d "$HOT_APP" ]; then
-        APP_PATH="$HOT_APP"
-    elif [ -d "$LITE_APP" ]; then
-        APP_PATH="$LITE_APP"
-    fi
-fi
-
-if [ -z "$APP_PATH" ]; then
-    # No apps found - use shell cleanup script (no Python required)
+if [ ! -d "$APP_PATH" ]; then
+    # App not found - use shell cleanup script (no Python required)
     SHELL_CLEANUP="$HOME/.zest/cleanup.sh"
     PYTHON_CLI="$HOME/.zest/main.py"
 
@@ -329,7 +257,7 @@ fi
 
 # If launched from Finder, show dialog and exit (after first-run setup is complete)
 if [ "$LAUNCHED_FROM_FINDER" = true ]; then
-    osascript -e "display dialog \"Zest CLI ($PRODUCT_NAME) installed!
+    osascript -e "display dialog \"Zest CLI installed!
 
 Open Terminal and run a command, for example:
   zest list all files in Downloads
@@ -364,20 +292,16 @@ cp -R "$APP_BUNDLE" "$DMG_STAGING/"
 # Create Applications symlink
 ln -s /Applications "$DMG_STAGING/Applications"
 
-# Copy documentation (use product-specific license)
-if [ -f "$LICENSE_FILE" ]; then
-    cp "$LICENSE_FILE" "$DMG_STAGING/MODEL_LICENSE.txt"
-else
-    cp "$PROJECT_DIR/resources/MODEL_LICENSE.txt" "$DMG_STAGING/" 2>/dev/null || true
-fi
+# Copy documentation
+cp "$PROJECT_DIR/resources/MODEL_LICENSE.txt" "$DMG_STAGING/" 2>/dev/null || true
 cp "$PROJECT_DIR/resources/README_INSTALL.txt" "$DMG_STAGING/" 2>/dev/null || true
 
 # Create DMG
-DMG_NAME="${APP_NAME}${PRODUCT_SUFFIX}-${VERSION}.dmg"
+DMG_NAME="${APP_NAME}-${VERSION}.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 
 hdiutil create \
-    -volname "${APP_NAME} ${PRODUCT_SUFFIX} ${VERSION}" \
+    -volname "${APP_NAME} ${VERSION}" \
     -srcfolder "$DMG_STAGING" \
     -ov \
     -format UDZO \
@@ -405,22 +329,6 @@ echo "=============================================="
 echo ""
 echo "📦 DMG: $DMG_PATH"
 echo "📏 Size: $(du -h "$DMG_PATH" | cut -f1)"
-echo ""
-echo "To build other models, run:"
-case "$PRODUCT" in
-    lite)
-        echo "  ./build_dmg.sh hot"
-        echo "  ./build_dmg.sh extra_spicy"
-        ;;
-    hot)
-        echo "  ./build_dmg.sh lite"
-        echo "  ./build_dmg.sh extra_spicy"
-        ;;
-    extra_spicy)
-        echo "  ./build_dmg.sh lite"
-        echo "  ./build_dmg.sh hot"
-        ;;
-esac
 echo ""
 echo "Next steps:"
 echo "1. Test the DMG by mounting and installing"

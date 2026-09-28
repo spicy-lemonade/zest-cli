@@ -3,6 +3,7 @@ Trial flow management for Zest CLI.
 Handles trial start, expiration prompts, and pending checkout auto-activation.
 """
 
+import os
 import sys
 import subprocess
 import time
@@ -10,18 +11,16 @@ import requests
 from datetime import datetime, timezone
 
 from config import (
-    API_BASE, PRODUCTS, TRIAL_CHECK_INTERVAL,
+    API_BASE, PRODUCT_NAME, MODEL_PATH, TRIAL_CHECK_INTERVAL,
     load_config, save_config, format_connection_error
 )
 
 
-def _delete_model_file(product: str):
+def _delete_model_file():
     """Delete the model file from disk when trial expires."""
-    import os
-    model_path = PRODUCTS[product]["path"]
-    if os.path.exists(model_path):
+    if os.path.exists(MODEL_PATH):
         try:
-            os.remove(model_path)
+            os.remove(MODEL_PATH)
         except OSError:
             pass
 
@@ -32,12 +31,12 @@ def get_hw_id():
     return subprocess.check_output(cmd, shell=True).decode().strip()
 
 
-def check_trial_status_with_server(email: str, product: str, device_id: str) -> dict | None:
+def check_trial_status_with_server(email: str, device_id: str) -> dict | None:
     """Check trial status with the server. Returns status dict or None on error."""
     try:
         res = requests.post(
             f"{API_BASE}/check_trial_status",
-            json={"email": email, "product": product, "device_id": device_id},
+            json={"email": email, "device_id": device_id},
             timeout=15
         )
         if res.status_code == 200:
@@ -47,7 +46,7 @@ def check_trial_status_with_server(email: str, product: str, device_id: str) -> 
     return None
 
 
-def check_pending_checkout_and_activate(product: str) -> bool | str | None:
+def check_pending_checkout_and_activate() -> bool | str | None:
     """
     Check if user has a pending checkout and attempt auto-activation.
     Returns True if activation succeeded, False if should proceed to paid activation,
@@ -64,11 +63,10 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
         return None
 
     pending_email = pending.get("email")
-    pending_product = pending.get("product")
     pending_time = pending.get("timestamp", 0)
 
-    # Only consider checkouts from the last 24 hours for the same product
-    if pending_product != product or (time.time() - pending_time) > 86400:
+    # Only consider checkouts from the last 24 hours
+    if (time.time() - pending_time) > 86400:
         del config["pending_checkout"]
         save_config(config)
         return None
@@ -79,7 +77,7 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
     try:
         res = requests.post(
             f"{API_BASE}/check_trial_status",
-            json={"email": pending_email, "product": product, "device_id": hw_id},
+            json={"email": pending_email, "device_id": hw_id},
             timeout=15
         )
         if res.status_code == 200:
@@ -91,7 +89,7 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
                 print("")
                 del config["pending_checkout"]
                 save_config(config)
-                return activate_paid_license(product, pending_email)
+                return activate_paid_license(pending_email)
             else:
                 print("\033[2K\r")
                 print(f"🍋 Payment not yet received for {pending_email}.")
@@ -106,7 +104,7 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
                 while True:
                     choice = input("Enter choice [1/2/3/4/5]: ").strip()
                     if choice == "1":
-                        return check_pending_checkout_and_activate(product)
+                        return check_pending_checkout_and_activate()
                     elif choice == "2":
                         del config["pending_checkout"]
                         save_config(config)
@@ -140,7 +138,7 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
         while True:
             choice = input("Enter choice [1/2/3/4/5]: ").strip()
             if choice == "1":
-                return check_pending_checkout_and_activate(product)
+                return check_pending_checkout_and_activate()
             elif choice == "2":
                 del config["pending_checkout"]
                 save_config(config)
@@ -162,15 +160,14 @@ def check_pending_checkout_and_activate(product: str) -> bool | str | None:
                 print("   Please enter 1, 2, 3, 4, or 5.")
 
 
-def show_trial_expired_prompt(product: str, email: str) -> bool:
+def show_trial_expired_prompt(email: str) -> bool:
     """
     Show options when trial expires.
     Returns True if user wants to activate paid license, False otherwise.
     """
-    product_name = PRODUCTS[product]["name"]
     print("")
     print("┌─────────────────────────────────────────────────┐")
-    print(f"│  ❗ Your free trial of {product_name} has expired.")
+    print(f"│  ❗ Your free trial of {PRODUCT_NAME} has expired.")
     print("│")
     print("│  Your model file has been removed.")
     print("│  Purchase a license to continue using Zest.")
@@ -188,7 +185,7 @@ def show_trial_expired_prompt(product: str, email: str) -> bool:
             try:
                 res = requests.post(
                     f"{API_BASE}/get_checkout_url",
-                    json={"email": email, "product": product},
+                    json={"email": email},
                     timeout=30
                 )
                 if res.status_code == 200:
@@ -203,7 +200,6 @@ def show_trial_expired_prompt(product: str, email: str) -> bool:
                         config = load_config()
                         config["pending_checkout"] = {
                             "email": email,
-                            "product": product,
                             "timestamp": time.time()
                         }
                         save_config(config)
@@ -224,7 +220,7 @@ def show_trial_expired_prompt(product: str, email: str) -> bool:
             print("   Please enter 1, 2, or 3.")
 
 
-def _check_device_trial(hw_id: str, product: str) -> dict | None:
+def _check_device_trial(hw_id: str) -> dict | None:
     """
     Check if device already has a trial before asking for email.
     Returns trial data dict if device has active/expired trial, None otherwise.
@@ -232,7 +228,7 @@ def _check_device_trial(hw_id: str, product: str) -> dict | None:
     try:
         res = requests.post(
             f"{API_BASE}/check_device_trial",
-            json={"device_id": hw_id, "product": product},
+            json={"device_id": hw_id},
             timeout=15
         )
         if res.status_code == 200:
@@ -251,7 +247,7 @@ def _check_device_trial(hw_id: str, product: str) -> dict | None:
     return None
 
 
-def _handle_existing_device_trial(device_trial: dict, product: str, hw_id: str) -> bool | None:
+def _handle_existing_device_trial(device_trial: dict, hw_id: str) -> bool | None:
     """
     Handle the case where the device already has a trial.
     Returns True if trial restored, False to switch flow, None to continue to email prompt.
@@ -264,7 +260,7 @@ def _handle_existing_device_trial(device_trial: dict, product: str, hw_id: str) 
         print(f"\n⚠️  This device has already used its free trial.")
         if trial_email:
             print(f"   Previously registered with: {trial_email}")
-        if show_trial_expired_prompt(product, trial_email):
+        if show_trial_expired_prompt(trial_email):
             return False
         sys.exit(0)
 
@@ -293,8 +289,7 @@ def _handle_existing_device_trial(device_trial: dict, product: str, hw_id: str) 
             choice = input("Enter choice [1/2]: ").strip()
             if choice == "1":
                 config = load_config()
-                trial_key = f"{product}_trial"
-                config[trial_key] = {
+                config["trial"] = {
                     "email": trial_email,
                     "is_trial": True,
                     "trial_expires_at": expires_at,
@@ -313,24 +308,23 @@ def _handle_existing_device_trial(device_trial: dict, product: str, hw_id: str) 
     return None
 
 
-def start_trial_flow(product: str) -> bool:
+def start_trial_flow() -> bool:
     """
-    Start a free trial for the product.
+    Start a free trial.
     Returns True if trial started successfully, False otherwise.
     """
     hw_id = get_hw_id()
-    product_name = PRODUCTS[product]["name"]
 
     print(f"\n\033[2K\r🌶️ Checking device...", end="", flush=True)
-    device_trial = _check_device_trial(hw_id, product)
+    device_trial = _check_device_trial(hw_id)
 
     if device_trial:
         print("\033[2K\r", end="")
-        result = _handle_existing_device_trial(device_trial, product, hw_id)
+        result = _handle_existing_device_trial(device_trial, hw_id)
         if result is not None:
             return result
 
-    print(f"\033[2K\r🍋 Start your free trial of {product_name}")
+    print(f"\033[2K\r🍋 Start your free trial of {PRODUCT_NAME}")
 
     # Email entry loop with retry on errors
     while True:
@@ -344,12 +338,12 @@ def start_trial_flow(product: str) -> bool:
         try:
             otp_res = requests.post(
                 f"{API_BASE}/send_otp",
-                json={"email": email, "product": product, "flow_type": "trial", "device_id": hw_id},
+                json={"email": email, "flow_type": "trial", "device_id": hw_id},
                 timeout=30
             )
             if otp_res.status_code == 200:
                 data = otp_res.json()
-                result = _handle_otp_response(data, product, email)
+                result = _handle_otp_response(data, email)
                 if result is not None:
                     return result
                 # If result is None, OTP was sent successfully, break loop
@@ -380,7 +374,7 @@ def start_trial_flow(product: str) -> bool:
 
         if code.lower() == "back":
             print("")
-            return start_trial_flow(product)
+            return start_trial_flow()
 
         if not code:
             print("   Please enter the 6-digit code.")
@@ -394,25 +388,25 @@ def start_trial_flow(product: str) -> bool:
             print("   Please enter the 6-digit code.")
             continue
 
-        result = _complete_trial_registration(email, code, product, hw_id, nickname)
+        result = _complete_trial_registration(email, code, hw_id, nickname)
         if result == "success":
             return True
         if result == "terminal":
             return False
         # result == "retry" - offer retry options
-        retry_action = _prompt_otp_retry(email, product, hw_id)
+        retry_action = _prompt_otp_retry(email, hw_id)
         if retry_action == "retry_code":
             print("")
             continue
         elif retry_action == "new_code":
             continue
         elif retry_action == "new_email":
-            return start_trial_flow(product)
+            return start_trial_flow()
         else:
             return False
 
 
-def _handle_otp_response(data: dict, product: str, email: str) -> bool | None:
+def _handle_otp_response(data: dict, email: str) -> bool | None:
     """
     Handle the OTP response statuses.
     Returns True/False for terminal states, None if OTP was sent and should continue.
@@ -426,7 +420,7 @@ def _handle_otp_response(data: dict, product: str, email: str) -> bool | None:
     if status == "trial_expired":
         print("\033[2K\r")
         print(f"⚠️  {data.get('message', 'Your trial has expired.')}")
-        if show_trial_expired_prompt(product, email):
+        if show_trial_expired_prompt(email):
             return False
         sys.exit(0)
 
@@ -443,14 +437,14 @@ def _handle_otp_response(data: dict, product: str, email: str) -> bool | None:
             while True:
                 choice = input("Enter choice [1/2]: ").strip()
                 if choice == "1":
-                    _restore_active_trial(data, product, trial_email)
+                    _restore_active_trial(data, trial_email)
                     return True
                 elif choice == "2":
                     print("Goodbye!")
                     sys.exit(0)
                 else:
                     print("   Please enter 1 or 2.")
-        _restore_active_trial(data, product, email)
+        _restore_active_trial(data, email)
         return True
 
     if status == "machine_trial_expired":
@@ -459,7 +453,7 @@ def _handle_otp_response(data: dict, product: str, email: str) -> bool | None:
         prev_email = data.get("previous_email", "")
         if prev_email:
             print(f"   Previously registered with: {prev_email}")
-        if show_trial_expired_prompt(product, prev_email or email):
+        if show_trial_expired_prompt(prev_email or email):
             return False
         sys.exit(0)
 
@@ -478,7 +472,7 @@ def _handle_otp_response(data: dict, product: str, email: str) -> bool | None:
     return None
 
 
-def _restore_active_trial(data: dict, product: str, email: str):
+def _restore_active_trial(data: dict, email: str):
     """Restore an active trial that was already registered on this device."""
     print("\033[2K\r")
     trial_email = data.get("trial_email", email)
@@ -489,8 +483,7 @@ def _restore_active_trial(data: dict, product: str, email: str):
     minutes = data.get("minutes_remaining", 0)
 
     config = load_config()
-    trial_key = f"{product}_trial"
-    config[trial_key] = {
+    config["trial"] = {
         "email": trial_email,
         "is_trial": True,
         "trial_expires_at": expires_at,
@@ -511,13 +504,11 @@ def _restore_active_trial(data: dict, product: str, email: str):
     print("   Just a moment...")
 
 
-def _complete_trial_registration(email: str, code: str, product: str, hw_id: str, nickname: str) -> str:
+def _complete_trial_registration(email: str, code: str, hw_id: str, nickname: str) -> str:
     """
     Complete trial registration after OTP verification.
     Returns: "success", "retry" (for OTP errors), or "terminal" (for non-retryable states)
     """
-    product_name = PRODUCTS[product]["name"]
-
     print(f"\n\033[2K\r🌶️ Starting trial...", end="", flush=True)
     try:
         trial_res = requests.post(
@@ -525,7 +516,6 @@ def _complete_trial_registration(email: str, code: str, product: str, hw_id: str
             json={
                 "email": email,
                 "otp_code": code,
-                "product": product,
                 "device_id": hw_id,
                 "device_name": nickname
             },
@@ -543,13 +533,13 @@ def _complete_trial_registration(email: str, code: str, product: str, hw_id: str
             if status == "trial_expired":
                 print("\033[2K\r")
                 print("⚠️  Your trial has already expired.")
-                if show_trial_expired_prompt(product, email):
+                if show_trial_expired_prompt(email):
                     return "terminal"
                 sys.exit(0)
 
             if status in ["trial_started", "trial_active"]:
-                _save_trial_config(email, product, nickname, data)
-                _print_trial_success(status, data, product_name)
+                _save_trial_config(email, nickname, data)
+                _print_trial_success(status, data)
                 return "success"
 
         # Check for OTP-related errors and show user-friendly message
@@ -565,11 +555,10 @@ def _complete_trial_registration(email: str, code: str, product: str, hw_id: str
         return "retry"
 
 
-def _save_trial_config(email: str, product: str, nickname: str, data: dict):
+def _save_trial_config(email: str, nickname: str, data: dict):
     """Save trial configuration to local config."""
     config = load_config()
-    trial_key = f"{product}_trial"
-    config[trial_key] = {
+    config["trial"] = {
         "email": email,
         "is_trial": True,
         "trial_expires_at": data.get("trial_expires_at"),
@@ -579,7 +568,7 @@ def _save_trial_config(email: str, product: str, nickname: str, data: dict):
     save_config(config)
 
 
-def _print_trial_success(status: str, data: dict, product_name: str):
+def _print_trial_success(status: str, data: dict):
     """Print trial success message."""
     days = data.get("days_remaining", 0)
     hours = data.get("hours_remaining", 0)
@@ -588,17 +577,17 @@ def _print_trial_success(status: str, data: dict, product_name: str):
     print("\033[2K\r")
     action_word = "started" if status == "trial_started" else "continues"
     if days > 0:
-        print(f"✅ Trial {action_word}! You have {days} days to try {product_name}.")
+        print(f"✅ Trial {action_word}! You have {days} days to try {PRODUCT_NAME}.")
     elif hours > 0:
-        print(f"✅ Trial {action_word}! You have {hours} hours to try {product_name}.")
+        print(f"✅ Trial {action_word}! You have {hours} hours to try {PRODUCT_NAME}.")
     elif minutes > 0:
-        print(f"✅ Trial {action_word}! You have {minutes} minutes to try {product_name}.")
+        print(f"✅ Trial {action_word}! You have {minutes} minutes to try {PRODUCT_NAME}.")
     else:
         print(f"✅ Trial {action_word}! Your trial is expiring soon.")
     print("   Just a moment...")
 
 
-def _prompt_otp_retry(email: str, product: str, hw_id: str) -> str:
+def _prompt_otp_retry(email: str, hw_id: str) -> str:
     """
     Prompt user for retry options after OTP verification failure.
     Returns: "retry_code", "new_code", "new_email", or "cancel"
@@ -619,7 +608,7 @@ def _prompt_otp_retry(email: str, product: str, hw_id: str) -> str:
             try:
                 otp_res = requests.post(
                     f"{API_BASE}/send_otp",
-                    json={"email": email, "product": product, "flow_type": "trial", "device_id": hw_id},
+                    json={"email": email, "flow_type": "trial", "device_id": hw_id},
                     timeout=30
                 )
                 if otp_res.status_code == 200:
@@ -639,14 +628,13 @@ def _prompt_otp_retry(email: str, product: str, hw_id: str) -> str:
             print("   Please enter 1, 2, 3, or 4.")
 
 
-def check_trial_license(product: str) -> bool:
+def check_trial_license() -> bool:
     """
-    Check if the user has an active trial for this product.
+    Check if the user has an active trial.
     Returns True if trial is active, False if expired or no trial.
     """
     config = load_config()
-    trial_key = f"{product}_trial"
-    trial_data = config.get(trial_key)
+    trial_data = config.get("trial")
 
     if not trial_data or not trial_data.get("is_trial"):
         return False
@@ -664,7 +652,7 @@ def check_trial_license(product: str) -> bool:
         now = datetime.now(timezone.utc)
 
         if now >= expires_at:
-            return _handle_expired_trial(product, email, config, trial_key)
+            return _handle_expired_trial(email, config)
 
         remaining = expires_at - now
         hours_remaining = int(remaining.total_seconds() / 3600)
@@ -672,7 +660,7 @@ def check_trial_license(product: str) -> bool:
 
         # Periodic server check
         if (current_time - last_checked) >= TRIAL_CHECK_INTERVAL:
-            result = _check_trial_with_server(product, email, config, trial_key, trial_data, current_time, days_remaining, hours_remaining)
+            result = _check_trial_with_server(email, config, trial_data, current_time, days_remaining, hours_remaining)
             if result is not None:
                 return result
 
@@ -682,7 +670,7 @@ def check_trial_license(product: str) -> bool:
         if 1 <= days_remaining <= 4 and not in_grace_period:
             last_reminder_day = trial_data.get("last_reminder_day", -1)
             if last_reminder_day != days_remaining:
-                result = _show_trial_reminder(product, email, days_remaining, config, trial_key, trial_data)
+                result = _show_trial_reminder(email, days_remaining, config, trial_data)
                 if result is not None:
                     return result
 
@@ -702,17 +690,15 @@ def check_trial_license(product: str) -> bool:
     return False
 
 
-def _show_trial_reminder(product: str, email: str, days_remaining: int,
-                         config: dict, trial_key: str, trial_data: dict) -> bool | None:
+def _show_trial_reminder(email: str, days_remaining: int, config: dict, trial_data: dict) -> bool | None:
     """
     Show daily trial reminder and offer checkout.
     Returns True if user purchased, None to continue with normal flow.
     """
-    product_name = PRODUCTS[product]["name"]
     day_word = "day" if days_remaining == 1 else "days"
 
     print("")
-    print(f"⏰ Your {product_name} trial expires in {days_remaining} {day_word}.")
+    print(f"⏰ Your {PRODUCT_NAME} trial expires in {days_remaining} {day_word}.")
     print("")
     print("   [1] Purchase a license now")
     print("   [2] Continue with trial")
@@ -723,17 +709,17 @@ def _show_trial_reminder(product: str, email: str, days_remaining: int,
         if choice == "1":
             # Save reminder shown before starting checkout
             trial_data["last_reminder_day"] = days_remaining
-            config[trial_key] = trial_data
+            config["trial"] = trial_data
             save_config(config)
 
             # Start checkout flow
-            if _start_reminder_checkout(product, email):
+            if _start_reminder_checkout(email):
                 return True
             return None
         elif choice == "2":
             # Save that we showed the reminder for this day threshold
             trial_data["last_reminder_day"] = days_remaining
-            config[trial_key] = trial_data
+            config["trial"] = trial_data
             save_config(config)
             print("")
             return None
@@ -741,10 +727,8 @@ def _show_trial_reminder(product: str, email: str, days_remaining: int,
             print("   Please enter 1 or 2.")
 
 
-def _start_reminder_checkout(product: str, email: str) -> bool:
+def _start_reminder_checkout(email: str) -> bool:
     """Start checkout flow from trial reminder."""
-    from activation import activate_paid_license
-
     print("")
     print(f"🍋 Opening checkout for {email}...")
 
@@ -752,7 +736,7 @@ def _start_reminder_checkout(product: str, email: str) -> bool:
     try:
         res = requests.post(
             f"{API_BASE}/get_checkout_url",
-            json={"email": email, "product": product, "device_id": hw_id},
+            json={"email": email, "device_id": hw_id},
             timeout=30
         )
         if res.status_code == 200:
@@ -767,7 +751,6 @@ def _start_reminder_checkout(product: str, email: str) -> bool:
                 config = load_config()
                 config["pending_checkout"] = {
                     "email": email,
-                    "product": product,
                     "timestamp": time.time()
                 }
                 save_config(config)
@@ -783,31 +766,30 @@ def _start_reminder_checkout(product: str, email: str) -> bool:
     return False
 
 
-def _handle_expired_trial(product: str, email: str, config: dict, trial_key: str) -> bool:
+def _handle_expired_trial(email: str, config: dict) -> bool:
     """Handle an expired trial - delete model, check for pending checkout or show prompt."""
-    _delete_model_file(product)
-    pending_result = check_pending_checkout_and_activate(product)
+    _delete_model_file()
+    pending_result = check_pending_checkout_and_activate()
     if pending_result is True:
         return True
     elif pending_result is False or pending_result in ("start_trial", "purchase"):
-        del config[trial_key]
+        del config["trial"]
         save_config(config)
         return False
 
     print("")
-    if show_trial_expired_prompt(product, email):
-        del config[trial_key]
+    if show_trial_expired_prompt(email):
+        del config["trial"]
         save_config(config)
         return False
     sys.exit(0)
 
 
-def _check_trial_with_server(product: str, email: str, config: dict, trial_key: str,
-                              trial_data: dict, current_time: float,
+def _check_trial_with_server(email: str, config: dict, trial_data: dict, current_time: float,
                               days_remaining: int, hours_remaining: int) -> bool | None:
     """Check trial status with server during periodic refresh."""
     hw_id = get_hw_id()
-    server_status = check_trial_status_with_server(email, product, hw_id)
+    server_status = check_trial_status_with_server(email, hw_id)
 
     if not server_status:
         return None
@@ -818,8 +800,8 @@ def _check_trial_with_server(product: str, email: str, config: dict, trial_key: 
 
     if status == "paid":
         print("🍋 Your license has been activated!")
-        del config[trial_key]
-        config[f"{product}_license"] = {
+        del config["trial"]
+        config["license"] = {
             "email": email,
             "last_verified": current_time,
             "device_nickname": trial_data.get("device_nickname", "Device")
@@ -828,17 +810,17 @@ def _check_trial_with_server(product: str, email: str, config: dict, trial_key: 
         return True
 
     if status == "trial_expired":
-        pending_result = check_pending_checkout_and_activate(product)
+        pending_result = check_pending_checkout_and_activate()
         if pending_result is True:
             return True
         elif pending_result is False or pending_result in ("start_trial", "purchase"):
-            del config[trial_key]
+            del config["trial"]
             save_config(config)
             return False
 
         print("")
-        if show_trial_expired_prompt(product, email):
-            del config[trial_key]
+        if show_trial_expired_prompt(email):
+            del config["trial"]
             save_config(config)
             return False
         sys.exit(0)

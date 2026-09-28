@@ -8,37 +8,22 @@ This file contains licensing information for the AI model bundled with Zest CLI.
                               MODEL INFORMATION
 --------------------------------------------------------------------------------
 
-Zest CLI includes three model tiers:
-
-ZEST LITE:
-  Model: Qwen3-4B (Quantized Q5_K_M)
-  Base Model: Qwen/Qwen3-4B-Base
+ZEST CLI:
+  Model: Qwen3.5-9B (Quantized Q5_K_M)
+  Base Model: Qwen/Qwen3.5-9B
   Fine-tuned by: Spicy Lemonade (Zest CLI)
-  Fine-tuning: Unix/macOS command generation
-  Optimization: CPU-optimized for fast, efficient everyday CLI tasks
+  Fine-tuning: Supervised fine-tuning (SFT) and Direct Preference Optimization
+  (DPO) on Unix, macOS, and Windows command generation
+  Optimization: CPU-optimized for fast, accurate everyday CLI tasks
 
-ZEST HOT:
-  Model: Qwen2.5-coder-7b (Quantized Q5_K_M)
-  Base Model: Qwen/Qwen2.5-Coder-7B
-  Fine-tuned by: Spicy Lemonade (Zest CLI)
-  Fine-tuning: Unix/macOS command generation
-  Optimization: Balanced performance for complex logic and automation
-
-ZEST EXTRA SPICY:
-  Model: Qwen2.5-coder-7b (FP16)
-  Base Model: Qwen/Qwen2.5-Coder-7B
-  Fine-tuned by: Spicy Lemonade (Zest CLI)
-  Fine-tuning: Unix/macOS command generation
-  Optimization: Maximum precision for multi-step scripts and complex operations
-
-All models have been fine-tuned on Unix and macOS commands to provide accurate
-CLI command suggestions from natural language queries.
+The model has been fine-tuned on Unix, macOS, and Windows commands to provide
+accurate CLI command suggestions from natural language queries.
 
 --------------------------------------------------------------------------------
-                          ORIGINAL MODEL LICENSES
+                          ORIGINAL MODEL LICENSE
 --------------------------------------------------------------------------------
 
-The base models (Qwen3-4B-Base and Qwen2.5-Coder-7B) are licensed under the
+The base model (Qwen3.5-9B) is licensed under the
 Apache License 2.0 by Alibaba Cloud.
 
                                  Apache License
@@ -222,12 +207,11 @@ Apache License 2.0 by Alibaba Cloud.
                               COPYRIGHT NOTICES
 --------------------------------------------------------------------------------
 
-Original Models:
-  Qwen3-4B-Base: Copyright 2024 Alibaba Cloud
-  Qwen2.5-Coder-7B: Copyright 2024 Alibaba Cloud
+Original Model:
+  Qwen3.5-9B: Copyright 2026 Alibaba Cloud
   Licensed under the Apache License, Version 2.0
 
-Fine-tuned Models and Zest CLI:
+Fine-tuned Model and Zest CLI:
 Copyright 2026 Spicy Lemonade
 Licensed under the Apache License, Version 2.0
 
@@ -235,22 +219,17 @@ Licensed under the Apache License, Version 2.0
                                MODIFICATIONS
 --------------------------------------------------------------------------------
 
-These models have been modified from their original base models as follows:
+This model has been modified from its original base model as follows:
 
-1. Quantization:
-   - Zest Lite: Quantized to Q5_K_M format from Qwen3-4B-Base
-   - Zest Hot: Quantized to Q5_K_M format from Qwen2.5-Coder-7B
-   - Zest Extra Spicy: Maintained in FP16 format from Qwen2.5-Coder-7B
+1. Fine-tuning: Supervised fine-tuning (SFT) followed by Direct Preference
+   Optimization (DPO) on a curated dataset of Unix, macOS, and Windows
+   commands to improve its ability to translate natural language queries
+   into executable CLI commands.
 
-   Quantization performed using llama.cpp for efficient inference on
-   consumer hardware.
+2. Quantization: Quantized to Q5_K_M format from Qwen/Qwen3.5-9B using
+   llama.cpp for efficient inference on consumer hardware.
 
-2. Fine-tuning: All models have been fine-tuned on a curated dataset of
-   Unix and macOS commands to improve their ability to translate natural
-   language queries into executable CLI commands.
-
-3. Optimization: All models have been optimized for the Zest CLI use case,
-   specifically for generating single-line shell commands with varying
-   levels of complexity based on the model tier.
+3. Optimization: Optimized for the Zest CLI use case, specifically for
+   generating single-line shell commands.
 
 ================================================================================

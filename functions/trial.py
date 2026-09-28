@@ -8,11 +8,13 @@ from datetime import datetime, timezone, timedelta
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
 
-from config import VALID_PRODUCTS, TRIAL_DURATION_DAYS, SERVICE_ACCOUNT_EMAIL
+from config import TRIAL_DURATION_DAYS, SERVICE_ACCOUNT_EMAIL
 from helpers import (
-    get_product_fields,
-    get_trial_fields,
-    get_trial_devices_field,
+    PAID_FIELD,
+    TRIAL_FIELD,
+    TRIAL_STARTED_FIELD,
+    TRIAL_EXPIRES_FIELD,
+    TRIAL_DEVICES_FIELD,
     record_machine_trial,
     get_trial_status,
     check_otp_verify_attempt,
@@ -31,10 +33,7 @@ from helpers import (
 def check_device_trial(req: https_fn.Request) -> https_fn.Response:
     """
     Check if a device already has an active trial (without requiring email).
-    Expects JSON: {
-        "device_id": "HARDWARE-UUID",
-        "product": "lite", "hot", or "extra_spicy"
-    }
+    Expects JSON: {"device_id": "HARDWARE-UUID"}
     Returns:
     - {"status": "no_trial"} if device has no trial
     - {"status": "trial_active", "email": "...", ...} if device has active trial
@@ -46,16 +45,9 @@ def check_device_trial(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Invalid JSON", status=400)
 
     device_id = data.get("device_id")
-    product = data.get("product", "lite")
 
     if not device_id:
         return https_fn.Response("Missing device_id", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    _, _, expires_field = get_trial_fields(product)
-    trial_devices_field = get_trial_devices_field(product)
 
     db = firestore.client()
 
@@ -70,7 +62,7 @@ def check_device_trial(req: https_fn.Request) -> https_fn.Response:
         )
 
     machine_data = machine_doc.to_dict()
-    trial_email = machine_data.get(f"{product}_trial_email")
+    trial_email = machine_data.get("trial_email")
 
     if not trial_email:
         return https_fn.Response(
@@ -94,7 +86,7 @@ def check_device_trial(req: https_fn.Request) -> https_fn.Response:
         )
 
     license_data = license_doc.to_dict()
-    expires_at = license_data.get(expires_field)
+    expires_at = license_data.get(TRIAL_EXPIRES_FIELD)
 
     if not expires_at:
         return https_fn.Response(
@@ -127,7 +119,7 @@ def check_device_trial(req: https_fn.Request) -> https_fn.Response:
     minutes_remaining = int(remaining.total_seconds() / 60)
     days_remaining = (hours_remaining + 23) // 24
 
-    trial_devices = license_data.get(trial_devices_field, [])
+    trial_devices = license_data.get(TRIAL_DEVICES_FIELD, [])
     existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
     device_nickname = existing_device.get("device_name", "") if existing_device else ""
 
@@ -160,7 +152,6 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
     Expects JSON: {
         "email": "user@example.com",
         "otp_code": "123456",
-        "product": "lite", "hot", or "extra_spicy",
         "device_id": "HARDWARE-UUID",
         "device_name": "MacBook Pro"
     }
@@ -172,19 +163,11 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
 
     email = data.get("email")
     otp_code = data.get("otp_code")
-    product = data.get("product", "lite")
     device_id = data.get("device_id")
     device_name = data.get("device_name")
 
     if not all([email, otp_code, device_id, device_name]):
         return https_fn.Response("Missing required fields", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
-
-    paid_field, _, _ = get_product_fields(product)
-    trial_field, started_field, expires_field = get_trial_fields(product)
-    trial_devices_field = get_trial_devices_field(product)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -215,7 +198,7 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
 
     reset_otp_verify_attempts(db, email)
 
-    if license_data.get(paid_field):
+    if license_data.get(PAID_FIELD):
         doc_ref.update({
             "otp_code": firestore.DELETE_FIELD,
             "otp_expiry": firestore.DELETE_FIELD
@@ -226,8 +209,8 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
             content_type="application/json"
         )
 
-    if license_data.get(started_field):
-        expires_at = license_data.get(expires_field)
+    if license_data.get(TRIAL_STARTED_FIELD):
+        expires_at = license_data.get(TRIAL_EXPIRES_FIELD)
         now = datetime.now(timezone.utc)
         if isinstance(expires_at, str):
             expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -249,7 +232,7 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
         minutes_remaining = int(remaining.total_seconds() / 60)
         days_remaining = (hours_remaining + 23) // 24  # Ceiling division
 
-        trial_devices = license_data.get(trial_devices_field, [])
+        trial_devices = license_data.get(TRIAL_DEVICES_FIELD, [])
         existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
 
         if existing_device:
@@ -261,9 +244,9 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
                 "device_name": device_name,
                 "registered_at": now.isoformat()
             })
-            doc_ref.update({trial_devices_field: trial_devices})
+            doc_ref.update({TRIAL_DEVICES_FIELD: trial_devices})
 
-        record_machine_trial(db, device_id, email, product)
+        record_machine_trial(db, device_id, email)
 
         return https_fn.Response(
             json.dumps({
@@ -282,10 +265,10 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
     expires_at = now + timedelta(days=TRIAL_DURATION_DAYS)
 
     doc_ref.update({
-        trial_field: True,
-        started_field: now.isoformat(),
-        expires_field: expires_at.isoformat(),
-        trial_devices_field: [{
+        TRIAL_FIELD: True,
+        TRIAL_STARTED_FIELD: now.isoformat(),
+        TRIAL_EXPIRES_FIELD: expires_at.isoformat(),
+        TRIAL_DEVICES_FIELD: [{
             "device_id": device_id,
             "device_name": device_name,
             "registered_at": now.isoformat()
@@ -294,7 +277,7 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
         "otp_expiry": firestore.DELETE_FIELD
     })
 
-    record_machine_trial(db, device_id, email, product)
+    record_machine_trial(db, device_id, email)
 
     return https_fn.Response(
         json.dumps({
@@ -317,10 +300,9 @@ def start_trial(req: https_fn.Request) -> https_fn.Response:
 )
 def check_trial_status(req: https_fn.Request) -> https_fn.Response:
     """
-    Check trial/license status for a user and product.
+    Check trial/license status for a user.
     Expects JSON: {
         "email": "user@example.com",
-        "product": "lite", "hot", or "extra_spicy",
         "device_id": "HARDWARE-UUID"
     }
     """
@@ -330,14 +312,10 @@ def check_trial_status(req: https_fn.Request) -> https_fn.Response:
         return https_fn.Response("Invalid JSON", status=400)
 
     email = data.get("email")
-    product = data.get("product", "lite")
     device_id = data.get("device_id")
 
     if not email:
         return https_fn.Response("Missing email", status=400)
-
-    if product not in VALID_PRODUCTS:
-        return https_fn.Response(f"Invalid product. Must be one of: {VALID_PRODUCTS}", status=400)
 
     db = firestore.client()
     doc_ref = db.collection("licenses").document(email)
@@ -351,22 +329,21 @@ def check_trial_status(req: https_fn.Request) -> https_fn.Response:
         )
 
     license_data = doc.to_dict()
-    trial_status_result = get_trial_status(license_data, product)
+    trial_status_result = get_trial_status(license_data)
 
     if device_id:
-        trial_devices_field = get_trial_devices_field(product)
         device_nicknames = license_data.get("device_nicknames", {})
         if device_id in device_nicknames:
             trial_status_result["device_nickname"] = device_nicknames[device_id]
 
         if not trial_status_result.get("device_nickname"):
-            trial_devices = license_data.get(trial_devices_field, [])
+            trial_devices = license_data.get(TRIAL_DEVICES_FIELD, [])
             existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
             if existing_device:
                 trial_status_result["device_nickname"] = existing_device.get("device_name", "")
 
         if trial_status_result["status"] == "trial_active":
-            trial_devices = license_data.get(trial_devices_field, [])
+            trial_devices = license_data.get(TRIAL_DEVICES_FIELD, [])
             existing_device = next((d for d in trial_devices if d.get("device_id") == device_id), None)
             if not existing_device:
                 now = datetime.now(timezone.utc)
@@ -375,7 +352,7 @@ def check_trial_status(req: https_fn.Request) -> https_fn.Response:
                     "device_name": data.get("device_name", "Unknown Device"),
                     "registered_at": now.isoformat()
                 })
-                doc_ref.update({trial_devices_field: trial_devices})
+                doc_ref.update({TRIAL_DEVICES_FIELD: trial_devices})
 
     return https_fn.Response(
         json.dumps(trial_status_result),

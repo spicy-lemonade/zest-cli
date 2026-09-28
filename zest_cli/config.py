@@ -9,11 +9,13 @@ import json
 VERSION = "1.0.0"
 MODEL_VERSION = "1.0.0"
 
+# --- Product ---
+PRODUCT_NAME = "Zest CLI"
+
 # --- Paths ---
 ZEST_DIR = os.path.expanduser("~/.zest")
-MODEL_PATH_LITE = os.path.join(ZEST_DIR, "qwen2_5_coder_7b_Q5_K_M.gguf")
-MODEL_PATH_HOT = os.path.join(ZEST_DIR, "qwen2_5_coder_7b_fp16.gguf")
-MODEL_PATH_EXTRA_SPICY = os.path.join(ZEST_DIR, "qwen2_5_coder_14b_Q5_K_M.gguf")
+MODEL_PATH = os.path.join(ZEST_DIR, "qwen3.5_9b_Q5_K_M.gguf")
+APP_PATH = "/Applications/Zest.app"
 CONFIG_DIR = os.path.expanduser("~/Library/Application Support/Zest")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
@@ -24,20 +26,6 @@ API_BASE = "https://europe-west1-nl-cli.cloudfunctions.net"
 LEASE_DURATION = 1209600  # 14 days in seconds
 UPDATE_CHECK_INTERVAL = 1209600  # Check for updates every 2 weeks
 TRIAL_CHECK_INTERVAL = 86400  # 24 hours
-
-# --- App Bundles ---
-APP_PATHS = {
-    "lite": "/Applications/Zest-Lite.app",
-    "hot": "/Applications/Zest-Hot.app",
-    "extra_spicy": "/Applications/Zest-Extra-Spicy.app"
-}
-
-# --- Products ---
-PRODUCTS = {
-    "lite": {"path": MODEL_PATH_LITE, "name": "Lite"},
-    "hot": {"path": MODEL_PATH_HOT, "name": "Hot"},
-    "extra_spicy": {"path": MODEL_PATH_EXTRA_SPICY, "name": "Extra Spicy"}
-}
 
 # --- Response Constants ---
 AFFIRMATIVE = ("y", "yes", "yeah", "yep", "sure", "ok", "okay")

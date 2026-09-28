@@ -5,8 +5,16 @@ Version checking cloud function for Zest CLI.
 import json
 from firebase_functions import https_fn, options
 from firebase_admin import firestore
+from google.cloud import storage
 
-from config import VALID_PRODUCTS, MODEL_FILES, SERVICE_ACCOUNT_EMAIL
+from config import MODEL_FILE, GCS_BUCKET, SERVICE_ACCOUNT_EMAIL
+
+
+def _get_model_size_bytes() -> int:
+    """Get the model file's actual size from GCS, not a stored guess."""
+    storage_client = storage.Client()
+    blob = storage_client.bucket(GCS_BUCKET).get_blob(MODEL_FILE)
+    return blob.size if blob else 0
 
 
 @https_fn.on_request(
@@ -20,17 +28,16 @@ from config import VALID_PRODUCTS, MODEL_FILES, SERVICE_ACCOUNT_EMAIL
 def check_version(req: https_fn.Request) -> https_fn.Response:
     """
     Check for available updates.
-    Returns the latest versions of CLI and models.
+    Returns the latest versions of CLI and model.
 
     GET or POST with optional JSON: {
         "current_version": "1.0.0",
-        "current_model_version": "1.0.0",
-        "product": "lite", "hot", or "extra_spicy"
+        "current_model_version": "1.0.0"
     }
 
     Response includes:
     - latest_cli_version: Latest CLI version available
-    - latest_model_version: Latest model version for the product
+    - latest_model_version: Latest model version
     - cli_update_available: Boolean indicating if CLI update is available
     - model_update_available: Boolean indicating if model update is available
     - update_message: Optional message to display to user
@@ -40,26 +47,21 @@ def check_version(req: https_fn.Request) -> https_fn.Response:
     """
     current_version = None
     current_model_version = None
-    product = "lite"
 
     if req.method == "POST":
         try:
             data = req.get_json()
             current_version = data.get("current_version")
             current_model_version = data.get("current_model_version")
-            product = data.get("product", "lite")
         except Exception:
             pass
-
-    if product not in VALID_PRODUCTS:
-        product = "lite"
 
     db = firestore.client()
 
     version_ref = db.collection("versions").document("current")
     version_doc = version_ref.get()
 
-    model_filename = MODEL_FILES.get(product, MODEL_FILES["lite"])
+    model_size = _get_model_size_bytes()
 
     if not version_doc.exists:
         return https_fn.Response(json.dumps({
@@ -69,14 +71,13 @@ def check_version(req: https_fn.Request) -> https_fn.Response:
             "model_update_available": False,
             "update_message": None,
             "update_url": "https://zestcli.com",
-            "model_filename": model_filename,
-            "model_size_bytes": 0
+            "model_filename": MODEL_FILE,
+            "model_size_bytes": model_size
         }), status=200, content_type="application/json")
 
     version_data = version_doc.to_dict()
     latest_cli = version_data.get("cli_version", "1.0.0")
-    latest_model = version_data.get(f"{product}_model_version", "1.0.0")
-    model_size = version_data.get(f"{product}_model_size", 0)
+    latest_model = version_data.get("model_version", "1.0.0")
     update_message = version_data.get("update_message")
     update_url = version_data.get("update_url", "https://zestcli.com")
 
@@ -105,6 +106,6 @@ def check_version(req: https_fn.Request) -> https_fn.Response:
         "model_update_available": model_update_available,
         "update_message": update_message,
         "update_url": update_url,
-        "model_filename": model_filename,
+        "model_filename": MODEL_FILE,
         "model_size_bytes": model_size
     }), status=200, content_type="application/json")

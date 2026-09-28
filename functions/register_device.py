@@ -14,7 +14,7 @@ except ImportError:
     sys.exit(1)
 
 
-def register_device(email: str, device_uuid: str, nickname: str, product: str = "lite"):
+def register_device(email: str, device_uuid: str, nickname: str):
     """Pre-register a device on an existing license."""
 
     try:
@@ -40,32 +40,30 @@ def register_device(email: str, device_uuid: str, nickname: str, product: str = 
         "last_validated_unix": int(now.timestamp())
     }
 
-    devices_field = f"{product}_devices"
     license_data = doc.to_dict()
-    devices = license_data.get(devices_field, [])
+    devices = license_data.get("devices", [])
 
     # Check if device already registered
     for d in devices:
         if d["uuid"] == device_uuid:
-            print(f"Device already registered for {product}")
+            print("Device already registered")
             return
 
     devices.append(device_data)
-    license_ref.update({devices_field: devices})
+    license_ref.update({"devices": devices})
 
-    print(f"✅ Device registered for {email} ({product})")
+    print(f"✅ Device registered for {email}")
     print(f"   Device UUID: {device_uuid}")
     print(f"   Nickname: {nickname}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print("Usage: python register_device.py <email> <device_uuid> <nickname> [product]")
+        print("Usage: python register_device.py <email> <device_uuid> <nickname>")
         sys.exit(1)
 
     email = sys.argv[1]
     device_uuid = sys.argv[2]
     nickname = sys.argv[3]
-    product = sys.argv[4] if len(sys.argv) > 4 else "lite"
 
-    register_device(email, device_uuid, nickname, product)
+    register_device(email, device_uuid, nickname)

@@ -12,69 +12,35 @@ import json
 import requests
 
 from config import (
-    ZEST_DIR, MODEL_PATH_LITE, MODEL_PATH_HOT, MODEL_PATH_EXTRA_SPICY, PRODUCTS, APP_PATHS,
+    ZEST_DIR, MODEL_PATH, APP_PATH,
     API_BASE, VERSION, MODEL_VERSION, UPDATE_CHECK_INTERVAL, AFFIRMATIVE,
     load_config, save_config, format_connection_error
 )
 
 
-def get_active_product() -> str | None:
+def is_installed() -> bool:
+    """Check whether the app bundle or model file is present on this device."""
+    return os.path.exists(APP_PATH) or os.path.exists(MODEL_PATH)
+
+
+def check_for_orphaned_installation() -> bool:
     """
-    Determine which product to use.
-    Priority: 1) User preference, 2) extra_spicy if available, 3) hot if available, 4) lite if available
-    Only considers products where the app bundle is installed (DMG mode).
-    Returns None if no models are installed.
-    """
-    config = load_config()
-    preferred = config.get("active_product")
-
-    # If user has a preference and app or model exists, use it
-    if preferred and preferred in PRODUCTS:
-        app_exists = os.path.exists(APP_PATHS.get(preferred, ""))
-        model_exists = os.path.exists(PRODUCTS[preferred]["path"])
-        if app_exists or model_exists:
-            return preferred
-
-    # Otherwise, prefer extra_spicy > hot > lite if app or model is available
-    for product in ["extra_spicy", "hot", "lite"]:
-        app_exists = os.path.exists(APP_PATHS[product])
-        model_exists = os.path.exists(PRODUCTS[product]["path"])
-        if app_exists or model_exists:
-            return product
-
-    # Fallback: if no app bundle but model exists, still allow (dev/manual mode)
-    if os.path.exists(MODEL_PATH_EXTRA_SPICY):
-        return "extra_spicy"
-    if os.path.exists(MODEL_PATH_HOT):
-        return "hot"
-    if os.path.exists(MODEL_PATH_LITE):
-        return "lite"
-
-    return None
-
-
-def check_for_orphaned_installation(active_product: str) -> bool:
-    """
-    Check if app bundle has been deleted but files remain for the ACTIVE product only.
+    Check if app bundle has been deleted but files remain.
     Delegates to cleanup.sh for the actual cleanup work.
     Returns True if orphaned installation was detected and user chose to clean up.
     """
     config = load_config()
     cleanup_script = os.path.join(ZEST_DIR, "cleanup.sh")
 
-    product = active_product
-    app_path = APP_PATHS[product]
-    model_path = PRODUCTS[product]["path"]
-    product_key = f"{product}_license"
-    license_data = config.get(product_key)
+    license_data = config.get("license")
 
     # Check for setup marker (created during first-run DMG setup)
-    setup_marker = os.path.join(ZEST_DIR, f".{product}_setup_complete")
+    setup_marker = os.path.join(ZEST_DIR, ".setup_complete")
     main_py_marker = os.path.join(ZEST_DIR, "main.py")
     was_installed_via_dmg = os.path.exists(setup_marker) or os.path.exists(main_py_marker) or license_data
 
     # Trigger orphan cleanup if model exists, app missing, and was installed via DMG
-    if os.path.exists(model_path) and not os.path.exists(app_path) and was_installed_via_dmg:
+    if os.path.exists(MODEL_PATH) and not os.path.exists(APP_PATH) and was_installed_via_dmg:
         if os.path.exists(cleanup_script):
             try:
                 result = subprocess.run([cleanup_script], check=False)
@@ -82,7 +48,7 @@ def check_for_orphaned_installation(active_product: str) -> bool:
             except (subprocess.SubprocessError, OSError):
                 pass
 
-        print(f"\n⚠️  Zest {PRODUCTS[product]['name']} app was removed from Applications.")
+        print(f"\n⚠️  Zest app was removed from Applications.")
         print("   Model files still exist on this device.")
         print("")
         print("   Run 'zest --uninstall' to clean up.")
@@ -91,24 +57,24 @@ def check_for_orphaned_installation(active_product: str) -> bool:
     return False
 
 
-def get_model_version(product: str) -> str:
-    """Get the installed model version for a product from config."""
+def get_model_version() -> str:
+    """Get the installed model version from config."""
     config = load_config()
-    return config.get(f"{product}_model_version", MODEL_VERSION)
+    return config.get("model_version", MODEL_VERSION)
 
 
-def set_model_version(product: str, version: str):
-    """Save the installed model version for a product."""
+def set_model_version(version: str):
+    """Save the installed model version."""
     config = load_config()
-    config[f"{product}_model_version"] = version
+    config["model_version"] = version
     save_config(config)
 
 
-def request_model_download_url(product: str) -> dict | None:
+def request_model_download_url() -> dict | None:
     """Request a signed download URL from the backend. Returns {"download_url": ..., "model_size_bytes": ...} or None."""
     config = load_config()
-    license_data = config.get(f"{product}_license", {})
-    trial_data = config.get(f"{product}_trial", {})
+    license_data = config.get("license", {})
+    trial_data = config.get("trial", {})
     email = license_data.get("email") or trial_data.get("email")
 
     if not email:
@@ -120,7 +86,7 @@ def request_model_download_url(product: str) -> dict | None:
     try:
         res = requests.post(
             f"{API_BASE}/get_model_download_url",
-            json={"email": email, "device_id": hw_id, "product": product},
+            json={"email": email, "device_id": hw_id},
             timeout=15
         )
         if res.status_code == 200:
@@ -133,16 +99,14 @@ def request_model_download_url(product: str) -> dict | None:
     return None
 
 
-def ensure_model_downloaded(product: str):
+def ensure_model_downloaded():
     """Check if model file exists; if not, download it via signed URL."""
-    model_path = PRODUCTS[product]["path"]
-    if os.path.exists(model_path):
+    if os.path.exists(MODEL_PATH):
         return
 
-    product_name = PRODUCTS[product]["name"]
-    print(f"\n📥 {product_name} model not found. Downloading...")
+    print(f"\n📥 Model not found. Downloading...")
 
-    data = request_model_download_url(product)
+    data = request_model_download_url()
     if not data or not data.get("download_url"):
         print("❌ Could not get model download URL. Please try again later.")
         sys.exit(1)
@@ -150,8 +114,8 @@ def ensure_model_downloaded(product: str):
     os.makedirs(ZEST_DIR, exist_ok=True)
     model_size = data.get("model_size_bytes", 0)
 
-    if download_model_with_progress(data["download_url"], model_path, model_size):
-        print(f"✅ {product_name} model installed.")
+    if download_model_with_progress(data["download_url"], MODEL_PATH, model_size):
+        print(f"✅ Model installed.")
     else:
         print("❌ Model download failed. Please try again.")
         sys.exit(1)
@@ -215,7 +179,7 @@ def _print_download_progress(downloaded: int, total_size: int):
         print(f"\r   Downloaded: {downloaded_mb:.0f} MB", end="", flush=True)
 
 
-def check_for_updates(product: str) -> None:
+def check_for_updates() -> None:
     """Check for available updates. Only checks once per UPDATE_CHECK_INTERVAL."""
     config = load_config()
     last_check = config.get("last_update_check", 0)
@@ -224,15 +188,14 @@ def check_for_updates(product: str) -> None:
     if (current_time - last_check) < UPDATE_CHECK_INTERVAL:
         return
 
-    current_model_version = get_model_version(product)
+    current_model_version = get_model_version()
 
     try:
         res = requests.post(
             f"{API_BASE}/check_version",
             json={
                 "current_version": VERSION,
-                "current_model_version": current_model_version,
-                "product": product
+                "current_model_version": current_model_version
             },
             timeout=5
         )
@@ -242,7 +205,7 @@ def check_for_updates(product: str) -> None:
             save_config(config)
 
             _handle_cli_update(data)
-            _handle_model_update(data, product)
+            _handle_model_update(data)
 
     except (requests.exceptions.RequestException, json.JSONDecodeError):
         pass  # Silently fail
@@ -264,7 +227,7 @@ def _handle_cli_update(data: dict):
     print("")
 
 
-def _handle_model_update(data: dict, product: str):
+def _handle_model_update(data: dict):
     """Display model update notification and offer download if available."""
     if not data.get("model_update_available"):
         return
@@ -276,7 +239,6 @@ def _handle_model_update(data: dict, product: str):
     print("")
     print("┌─────────────────────────────────────────────────┐")
     print(f"│  🍋 Model Update available: v{latest_model_version}")
-    print(f"│  Product: {PRODUCTS[product]['name']}")
     if size_gb > 0:
         print(f"│  Size: {size_gb:.1f} GB")
     print("└─────────────────────────────────────────────────┘")
@@ -288,28 +250,27 @@ def _handle_model_update(data: dict, product: str):
         return
 
     print("")
-    print(f"📥 Downloading {PRODUCTS[product]['name']} model...")
-    model_path = PRODUCTS[product]["path"]
+    print(f"📥 Downloading model...")
 
-    url_data = request_model_download_url(product)
+    url_data = request_model_download_url()
     if not url_data or not url_data.get("download_url"):
         print("❌ Could not get model download URL. Please try again later.")
         return
 
-    backup_path = model_path + ".backup"
-    if os.path.exists(model_path):
-        os.rename(model_path, backup_path)
+    backup_path = MODEL_PATH + ".backup"
+    if os.path.exists(MODEL_PATH):
+        os.rename(MODEL_PATH, backup_path)
 
-    success = download_model_with_progress(url_data["download_url"], model_path, model_size)
+    success = download_model_with_progress(url_data["download_url"], MODEL_PATH, model_size)
 
     if success:
-        set_model_version(product, latest_model_version)
+        set_model_version(latest_model_version)
         print(f"✅ Model updated to v{latest_model_version}")
         if os.path.exists(backup_path):
             os.remove(backup_path)
     else:
         if os.path.exists(backup_path):
-            os.rename(backup_path, model_path)
+            os.rename(backup_path, MODEL_PATH)
             print("   Restored previous model.")
 
 
@@ -327,19 +288,18 @@ def suppress_c_logs():
         os.close(saved_stderr_fd)
 
 
-def load_model(product: str):
+def load_model():
     """Load the LLM model with GPU acceleration fallback to CPU."""
     from llama_cpp import Llama
 
-    model_path = PRODUCTS[product]["path"]
-    if not os.path.exists(model_path):
-        sys.stderr.write(f"❌ Error: Model not found at {model_path}\n")
+    if not os.path.exists(MODEL_PATH):
+        sys.stderr.write(f"❌ Error: Model not found at {MODEL_PATH}\n")
         sys.stderr.write("   Please ensure Zest is properly installed.\n")
         sys.exit(1)
 
     recommended_threads = max(1, multiprocessing.cpu_count() // 2)
     params = {
-        "model_path": model_path,
+        "model_path": MODEL_PATH,
         "n_ctx": 1024,
         "n_batch": 512,
         "n_threads": recommended_threads,

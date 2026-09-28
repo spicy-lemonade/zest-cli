@@ -28,14 +28,7 @@ Thank you for purchasing Zest CLI!
 
 5. (Optional) Create a symlink for easier access:
 
-   For Zest Lite:
-   sudo ln -sf "/Applications/Zest-Lite.app/Contents/MacOS/zest-launcher" /usr/local/bin/zest
-
-   For Zest Hot:
-   sudo ln -sf "/Applications/Zest-Hot.app/Contents/MacOS/zest-launcher" /usr/local/bin/zest
-
-   For Zest Extra Spicy:
-   sudo ln -sf "/Applications/Zest-Extra-Spicy.app/Contents/MacOS/zest-launcher" /usr/local/bin/zest
+   sudo ln -sf "/Applications/Zest.app/Contents/MacOS/zest-launcher" /usr/local/bin/zest
 
 6. (Recommended) Add noglob alias to prevent shell expansion issues:
 
@@ -61,81 +54,36 @@ zest "what processes are using the most memory"
 zest "list all running docker containers"
 
 ================================================================================
-                               MODEL VERSIONS
+                                 THE MODEL
 ================================================================================
 
-Zest is available in three model versions - pick your spice level:
+Zest CLI ships with a single model: a Qwen3.5-9B fine-tune (SFT + DPO),
+quantized to Q5_K_M (~6.6GB).
 
-  Zest Lite (CPU Optimized)
-  - Fast and efficient for everyday CLI tasks
-  - File size: ~2.9GB DMG (3GB available space needed)
-  - RAM: 8GB recommended
-  - No GPU required (CPU Optimized)
-  - Best for: MacBook Air, Mac Mini, or any modern Mac
+- File size: ~7GB DMG (7GB available space needed)
+- RAM: 16GB recommended
+- No GPU required (CPU-optimized, uses GPU acceleration when available)
+- Best for: Apple Silicon or Intel Mac with 16GB+ RAM
 
-  Zest Hot (Balanced Performance)
-  - Enhanced accuracy for complex logic and automation
-  - File size: ~5.4GB DMG (6GB available space needed)
-  - RAM: 12GB+ recommended
-  - Balanced power (Unified Memory optimized)
-  - Best for: MacBook Pro with 12GB+ RAM
-
-  Zest Extra Spicy (Maximum Precision)
-  - Highest accuracy for multi-step scripts and complex operations
-  - File size: ~11.9GB DMG (16GB available space needed)
-  - RAM: 32GB+ recommended
-  - High-precision (Apple Silicon optimized)
-  - Best for: MacBook Pro or Mac Studio with 32GB+ RAM
-
-Each version has its own license with 2 device slots. You can purchase
-multiple tiers and switch between them.
-
-================================================================================
-                        USING MULTIPLE MODELS
-================================================================================
-
-If you've purchased multiple model tiers:
-
-1. Install all apps to /Applications
-
-2. Check your current status:
-   zest --status
-
-3. Switch between models:
-   zest --model --lite           # Use Zest Lite model
-   zest --model --hot            # Use Zest Hot model
-   zest --model --extra-spicy    # Use Zest Extra Spicy model
-
-Note: If multiple models are installed, Zest defaults to the highest tier
-(Extra Spicy > Hot > Lite). You can override this with the --model flag.
+Your license allows installation on up to 2 devices.
 
 ================================================================================
                            DEVICE MANAGEMENT
 ================================================================================
 
-Your license allows installation on up to 2 devices PER PRODUCT.
-
-If you bought multiple tiers, you have:
-- 2 device slots for Zest Lite
-- 2 device slots for Zest Hot
-- 2 device slots for Zest Extra Spicy
+Your license allows installation on up to 2 devices.
 
 LOGOUT (keeps model files, frees device slot):
 
-  zest --logout                  # Log out from ALL products
-  zest --logout --lite           # Log out from Lite only
-  zest --logout --hot            # Log out from Hot only
-  zest --logout --extra-spicy    # Log out from Extra Spicy only
+  zest --logout                  # Log out this device
+  zest --logout --remote         # Log out any device remotely (requires OTP)
 
   Use --logout to free a device slot while keeping the model on disk.
   You can re-activate later without re-downloading.
 
 UNINSTALL (removes everything):
 
-  zest --uninstall               # Full uninstall of ALL products
-  zest --uninstall --lite        # Uninstall Lite only
-  zest --uninstall --hot         # Uninstall Hot only
-  zest --uninstall --extra-spicy # Uninstall Extra Spicy only
+  zest --uninstall               # Full uninstall
 
   Use --uninstall to completely remove the model file, license, and
   deregister the device. This frees disk space.
@@ -167,8 +115,7 @@ MODEL UPDATES (downloaded automatically):
 
   ┌─────────────────────────────────────────────────┐
   │  🍋 Model Update available: v1.1.0
-  │  Product: Zest Hot (Balanced Performance)
-  │  Size: 5.4 GB
+  │  Size: 6.6 GB
   └─────────────────────────────────────────────────┘
 
   🍋 Download new model now? [y/n]:
@@ -181,10 +128,7 @@ CLI UPDATES (manual download):
   Download the new DMG from https://zestcli.com to update.
 
 MANUAL UPDATE CHECK:
-  zest --update                  Check all products for updates
-  zest --update --lite           Check Lite for updates
-  zest --update --hot            Check Hot for updates
-  zest --update --extra-spicy    Check Extra Spicy for updates
+  zest --update                  Check for updates
 
 ================================================================================
                           APP REMOVAL CLEANUP
@@ -202,17 +146,10 @@ You can also choose to keep the files if you plan to reinstall.
                                REQUIREMENTS
 ================================================================================
 
-- macOS 12.0 (Monterey) or later for Lite and Hot
-- macOS 13.0 (Ventura) or later for Extra Spicy
+- macOS 13.0 (Ventura) or later
 - Apple Silicon (M1/M2/M3/M4) or Intel Mac
-- Disk space:
-  - Lite: ~2.9GB DMG (3GB available space)
-  - Hot: ~5.4GB DMG (6GB available space)
-  - Extra Spicy: ~11.9GB DMG (16GB available space)
-- RAM:
-  - Lite: 8GB recommended
-  - Hot: 12GB recommended
-  - Extra Spicy: 32GB+ recommended
+- Disk space: ~7GB DMG (7GB available space)
+- RAM: 16GB recommended
 
 ================================================================================
                              COMMAND REFERENCE
@@ -221,28 +158,15 @@ You can also choose to keep the files if you plan to reinstall.
 USAGE:
   zest "your natural language query"
 
-MODEL MANAGEMENT:
-  zest --model --lite           Switch to Lite model
-  zest --model --hot            Switch to Hot model
-  zest --model --extra-spicy    Switch to Extra Spicy model
-
 LOGOUT (keeps model files):
-  zest --logout                  Log out from all products
-  zest --logout --lite           Log out from Lite only
-  zest --logout --hot            Log out from Hot only
-  zest --logout --extra-spicy    Log out from Extra Spicy only
+  zest --logout                  Log out this device
+  zest --logout --remote         Log out any device remotely (requires OTP)
 
 UNINSTALL (removes model files):
-  zest --uninstall               Uninstall all products
-  zest --uninstall --lite        Uninstall Lite only
-  zest --uninstall --hot         Uninstall Hot only
-  zest --uninstall --extra-spicy Uninstall Extra Spicy only
+  zest --uninstall               Uninstall Zest
 
 UPDATES:
   zest --update                  Check for and download updates
-  zest --update --lite           Check for Lite updates
-  zest --update --hot            Check for Hot updates
-  zest --update --extra-spicy    Check for Extra Spicy updates
 
 INFO:
   zest --status           Show current model and license status
