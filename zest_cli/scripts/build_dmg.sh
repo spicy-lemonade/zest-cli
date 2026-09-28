@@ -195,12 +195,14 @@ if [ ! -f "$SETUP_MARKER" ]; then
         chmod +x "$CLEANUP_DEST"
     fi
 
-    # Create wrapper script at /usr/local/bin/zest
+    # Create (or refresh) wrapper script at /usr/local/bin/zest.
+    # Always overwritten here, even if one already exists: a wrapper left
+    # over from an older install (pre-single-product) points at app bundle
+    # names that no longer exist, and would otherwise be silently stuck.
     WRAPPER_PATH="/usr/local/bin/zest"
     WRAPPER_TMP="/tmp/zest_wrapper_$$"
-    if [ ! -f "$WRAPPER_PATH" ]; then
-        # Create temp file in /tmp (always writable)
-        cat > "$WRAPPER_TMP" << 'WRAPPER_EOF'
+    # Create temp file in /tmp (always writable)
+    cat > "$WRAPPER_TMP" << 'WRAPPER_EOF'
 #!/bin/bash
 # Zest CLI Wrapper - Survives app deletion for cleanup
 
@@ -227,29 +229,28 @@ fi
 exec "$APP_PATH/Contents/MacOS/zest-launcher" "$@"
 WRAPPER_EOF
 
-        if [ -f "$WRAPPER_TMP" ]; then
-            # Try to move without admin first
-            if mv "$WRAPPER_TMP" "$WRAPPER_PATH" 2>/dev/null && chmod +x "$WRAPPER_PATH" 2>/dev/null; then
-                echo "✅ Created wrapper: /usr/local/bin/zest"
+    if [ -f "$WRAPPER_TMP" ]; then
+        # Try to move without admin first
+        if mv "$WRAPPER_TMP" "$WRAPPER_PATH" 2>/dev/null && chmod +x "$WRAPPER_PATH" 2>/dev/null; then
+            echo "✅ Created wrapper: /usr/local/bin/zest"
+        else
+            # Need admin privileges - use AppleScript dialog for GUI, sudo for terminal
+            if [ "$LAUNCHED_FROM_FINDER" = true ]; then
+                # Use AppleScript to get admin privileges (shows macOS auth dialog)
+                osascript -e "do shell script \"mv '$WRAPPER_TMP' '$WRAPPER_PATH' && chmod +x '$WRAPPER_PATH'\" with administrator privileges" 2>/dev/null
             else
-                # Need admin privileges - use AppleScript dialog for GUI, sudo for terminal
-                if [ "$LAUNCHED_FROM_FINDER" = true ]; then
-                    # Use AppleScript to get admin privileges (shows macOS auth dialog)
-                    osascript -e "do shell script \"mv '$WRAPPER_TMP' '$WRAPPER_PATH' && chmod +x '$WRAPPER_PATH'\" with administrator privileges" 2>/dev/null
-                else
-                    # Terminal mode - use sudo
-                    echo "📎 Setting up command-line access requires sudo..."
-                    echo "Please enter your password to create /usr/local/bin/zest"
-                    sudo mv "$WRAPPER_TMP" "$WRAPPER_PATH" && sudo chmod +x "$WRAPPER_PATH"
-                    echo "✅ Created wrapper: /usr/local/bin/zest"
-                    echo ""
-                    echo "Add to your ~/.bashrc or ~/.zshrc (for using ? and * wildcards):"
-                    echo "  alias zest='noglob /usr/local/bin/zest'"
-                    echo ""
-                fi
+                # Terminal mode - use sudo
+                echo "📎 Setting up command-line access requires sudo..."
+                echo "Please enter your password to create /usr/local/bin/zest"
+                sudo mv "$WRAPPER_TMP" "$WRAPPER_PATH" && sudo chmod +x "$WRAPPER_PATH"
+                echo "✅ Created wrapper: /usr/local/bin/zest"
+                echo ""
+                echo "Add to your ~/.bashrc or ~/.zshrc (for using ? and * wildcards):"
+                echo "  alias zest='noglob /usr/local/bin/zest'"
+                echo ""
             fi
-            rm -f "$WRAPPER_TMP" 2>/dev/null
         fi
+        rm -f "$WRAPPER_TMP" 2>/dev/null
     fi
 
     touch "$SETUP_MARKER"
