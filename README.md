@@ -1,6 +1,6 @@
 # 🌶️ Zest CLI from Spicy Lemonade 🍋
 
-#### Small language models. Runs offline. Runs on CPU. No cloud. No API keys. Privacy first. No tracking.
+#### Small language model. Runs offline. Runs locally on your Mac. No cloud. No API keys. Privacy first. No tracking.
 
 Zest CLI translates natural language into shell commands using a local small language model. MacOS only. Learn more at [zestcli.com](https://zestcli.com). 
 
@@ -18,9 +18,9 @@ While the GIF shows simple file management, Zest is designed for a variety of do
 
 ### Why Zest CLI?
 
-- **Small language models** — purpose-trained SLMs optimised for CLI command translation
+- **Small language model** — a purpose-trained SLM optimised for CLI command translation
 - **Runs offline** — runs entirely on your machine with no network calls at inference time
-- **Runs on CPU** — no GPU needed, works on any modern Mac
+- **Runs locally** — uses your Mac's built-in GPU via Metal, with automatic CPU fallback; no dedicated GPU needed
 - **No cloud** — no cloud dependencies at inference time
 - **No API keys** — no accounts, tokens, or subscriptions required
 - **Privacy first** — your commands and queries never leave your device
@@ -28,7 +28,9 @@ While the GIF shows simple file management, Zest is designed for a variety of do
 
 ## 🏗 Model Architecture
 
-While the core agent runs **offline on CPU** (privacy-first, no tracking), the training pipeline utilizes Google Cloud Storage (GCS) to manage datasets before they are loaded into Google Colab for fine-tuning.
+Zest CLI runs a single model: [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B), fine-tuned for natural language to CLI translation with supervised fine-tuning (SFT) on ~74,000 examples, then aligned with Direct Preference Optimization (DPO). The model is quantized to Q5_K_M in GGUF format (~6.6GB) and runs locally through [llama.cpp](https://github.com/ggml-org/llama.cpp).
+
+While the core agent runs **offline on your Mac** (privacy-first, no tracking), the training pipeline utilizes Google Cloud Storage (GCS) to manage datasets before they are loaded into Google Colab for fine-tuning.
 
 ---
 
@@ -55,4 +57,3 @@ While the core agent runs **offline on CPU** (privacy-first, no tracking), the t
 New developers must be onboarded with IAM permissions and API keys before working with this infrastructure. See [docs/setup.md](docs/setup.md) for setup, deployment, IAM, and secrets configuration.
 
 ![spicy](https://github.com/user-attachments/assets/9c3d925d-5c7b-44ed-a2c8-b73e5a897895)
-
