@@ -8,7 +8,9 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "venv",
+        "__pycache__"
       ],
       "predeploy": []
     }
