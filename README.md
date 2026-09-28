@@ -28,9 +28,9 @@ While the GIF shows simple file management, Zest is designed for a variety of do
 
 ## 🏗 Model Architecture
 
-Zest CLI runs a single model: [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B), fine-tuned for natural language to CLI translation with supervised fine-tuning (SFT) on ~74,000 examples, then aligned with Direct Preference Optimization (DPO). The model is quantized to Q5_K_M in GGUF format (~6.6GB) and runs locally through [llama.cpp](https://github.com/ggml-org/llama.cpp).
+Zest CLI runs a single model, [Qwen3.5-9B](https://huggingface.co/Qwen/Qwen3.5-9B), fine-tuned for natural language to CLI translation with supervised fine-tuning (SFT) on ~74,000 real world examples, then aligned with Direct Preference Optimization (DPO). The model is quantized to Q5_K_M in GGUF format (~6.6GB) and runs on a bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) inference engine, so there's nothing extra to install.
 
-While the core agent runs **offline on your Mac** (privacy-first, no tracking), the training pipeline utilizes Google Cloud Storage (GCS) to manage datasets before they are loaded into Google Colab for fine-tuning.
+The core agent runs **offline on your Mac** (privacy-first, no tracking). The training pipeline utilises Google Cloud Storage (GCS) to manage datasets before they are loaded into Google Colab for GPU based fine-tuning.
 
 ---
 
