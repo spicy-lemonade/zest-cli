@@ -18,7 +18,7 @@ While the GIF shows simple file management, Zest is designed for a variety of do
 
 ### Why Zest CLI?
 
-- **Small language model** — a purpose-trained SLM optimised for CLI command translation
+- **Small language model** — Qwen3.5-9B, purpose-trained SLM optimised for CLI command translation
 - **Runs offline** — runs entirely on your machine with no network calls at inference time
 - **Runs locally** — uses your Mac's built-in GPU via Metal, with automatic CPU fallback; no dedicated GPU needed
 - **No cloud** — no cloud dependencies at inference time
